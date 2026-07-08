@@ -11,6 +11,11 @@ import java.util.Map;
 public final class TemplateMatcher {
     private static final int DEFAULT_MAX_STATES = 10_000;
     private static final int DEFAULT_MAX_RESULTS = 100;
+    private static final Comparator<MatchResult> RESULT_ORDER =
+            Comparator.comparingInt(MatchResult::priority).reversed()
+                    .thenComparing(Comparator.comparingInt(MatchResult::capturedTextLength).reversed())
+                    .thenComparing(MatchResult::category)
+                    .thenComparing(MatchResult::templateId);
 
     private final Node root;
     private final List<SequenceTemplate> sequenceTemplates;
@@ -64,11 +69,9 @@ public final class TemplateMatcher {
                     results.add(new MatchResult(
                             output.category,
                             output.templateId,
+                            output.priority,
                             PatternMode.EXACT,
                             state.captures));
-                    if (results.size() >= maxResults) {
-                        return results;
-                    }
                 }
             }
 
@@ -101,12 +104,13 @@ public final class TemplateMatcher {
             }
         }
 
-        return results;
+        return sortAndLimit(results, maxResults);
     }
 
     private List<MatchResult> matchSlotSequences(String input) {
         List<MatchResult> results = new ArrayList<>();
         int visitedStates = 0;
+        Map<String, List<SlotHit>> hitsBySlot = collectSlotHits(input);
 
         for (SequenceTemplate template : sequenceTemplates) {
             ArrayDeque<SequenceState> queue = new ArrayDeque<>();
@@ -122,39 +126,75 @@ public final class TemplateMatcher {
                     results.add(new MatchResult(
                             template.category,
                             template.templateId,
+                            template.priority,
                             PatternMode.SLOT_SEQUENCE,
                             state.captures));
-                    if (results.size() >= maxResults) {
-                        return results;
-                    }
                     continue;
                 }
 
                 String slotName = template.slotNames.get(state.slotIndex);
-                DoubleArrayTrie dictionary = slotDictionaries.get(slotName);
-                if (dictionary == null) {
+                List<SlotHit> hits = hitsBySlot.get(slotName);
+                if (hits == null) {
                     continue;
                 }
 
-                for (int pos = state.searchPos; pos < input.length(); pos++) {
-                    List<String> candidates = dictionary.commonPrefixSearch(input, pos);
-                    candidates.sort(Comparator.comparingInt(String::length).reversed());
-
-                    for (String candidate : candidates) {
-                        if (candidate.isEmpty()) {
-                            continue;
-                        }
-                        int end = pos + candidate.length();
+                for (SlotHit hit : hits) {
+                    if (hit.start >= state.searchPos) {
                         queue.addLast(new SequenceState(
                                 state.slotIndex + 1,
-                                end,
-                                appendCapture(state.captures, slotName, candidate, pos, end)));
+                                hit.end,
+                                appendCapture(state.captures, slotName, hit.value, hit.start, hit.end)));
                     }
                 }
             }
         }
 
-        return results;
+        return sortAndLimit(results, maxResults);
+    }
+
+    private Map<String, List<SlotHit>> collectSlotHits(String input) {
+        Map<String, List<SlotHit>> hitsBySlot = new HashMap<>();
+        for (String slotName : requiredSequenceSlotNames()) {
+            DoubleArrayTrie dictionary = slotDictionaries.get(slotName);
+            if (dictionary == null) {
+                continue;
+            }
+
+            List<SlotHit> hits = new ArrayList<>();
+            for (int pos = 0; pos < input.length(); pos++) {
+                List<String> candidates = dictionary.commonPrefixSearch(input, pos);
+                candidates.sort(Comparator.comparingInt(String::length).reversed());
+                for (String candidate : candidates) {
+                    if (!candidate.isEmpty()) {
+                        hits.add(new SlotHit(candidate, pos, pos + candidate.length()));
+                    }
+                }
+            }
+            if (!hits.isEmpty()) {
+                hitsBySlot.put(slotName, hits);
+            }
+        }
+        return hitsBySlot;
+    }
+
+    private List<String> requiredSequenceSlotNames() {
+        List<String> slotNames = new ArrayList<>();
+        for (SequenceTemplate template : sequenceTemplates) {
+            for (String slotName : template.slotNames) {
+                if (!slotNames.contains(slotName)) {
+                    slotNames.add(slotName);
+                }
+            }
+        }
+        return slotNames;
+    }
+
+    private static List<MatchResult> sortAndLimit(List<MatchResult> results, int maxResults) {
+        results.sort(RESULT_ORDER);
+        if (results.size() <= maxResults) {
+            return results;
+        }
+        return new ArrayList<>(results.subList(0, maxResults));
     }
 
     private static Map<String, List<SlotCapture>> appendCapture(
@@ -212,6 +252,7 @@ public final class TemplateMatcher {
                 sequenceTemplates.add(new SequenceTemplate(
                         pattern.category(),
                         pattern.templateId(),
+                        pattern.priority(),
                         slotNames(tokens)));
                 return this;
             }
@@ -224,7 +265,7 @@ public final class TemplateMatcher {
                     node = findOrCreateSlotEdge(node, token.slotName).next;
                 }
             }
-            node.outputs.add(new TemplateMeta(pattern.category(), pattern.templateId()));
+            node.outputs.add(new TemplateMeta(pattern.category(), pattern.templateId(), pattern.priority()));
             return this;
         }
 
@@ -254,7 +295,7 @@ public final class TemplateMatcher {
 
         public TemplateMatcher build() {
             return new TemplateMatcher(
-                    root,
+                    copyNode(root),
                     new ArrayList<>(sequenceTemplates),
                     new HashMap<>(slotDictionaries),
                     maxStates,
@@ -316,6 +357,18 @@ public final class TemplateMatcher {
             return edge;
         }
 
+        private static Node copyNode(Node source) {
+            Node copy = new Node();
+            copy.outputs.addAll(source.outputs);
+            for (Map.Entry<Character, Node> entry : source.charChildren.entrySet()) {
+                copy.charChildren.put(entry.getKey(), copyNode(entry.getValue()));
+            }
+            for (SlotEdge edge : source.slotEdges) {
+                copy.slotEdges.add(new SlotEdge(edge.slotName, copyNode(edge.next)));
+            }
+            return copy;
+        }
+
         private static void validateSlotName(String slotName) {
             if (slotName == null || slotName.isEmpty()) {
                 throw new IllegalArgumentException("slotName is required");
@@ -333,6 +386,7 @@ public final class TemplateMatcher {
     public static final class MatchResult {
         private final String category;
         private final String templateId;
+        private final int priority;
         private final PatternMode mode;
         private final Map<String, List<SlotCapture>> slotCaptures;
         private final Map<String, List<String>> captures;
@@ -340,10 +394,12 @@ public final class TemplateMatcher {
         private MatchResult(
                 String category,
                 String templateId,
+                int priority,
                 PatternMode mode,
                 Map<String, List<SlotCapture>> slotCaptures) {
             this.category = category;
             this.templateId = templateId;
+            this.priority = priority;
             this.mode = mode;
             this.slotCaptures = freezeSlotCaptures(slotCaptures);
             this.captures = freezeValues(this.slotCaptures);
@@ -359,6 +415,10 @@ public final class TemplateMatcher {
 
         public PatternMode mode() {
             return mode;
+        }
+
+        public int priority() {
+            return priority;
         }
 
         public Map<String, List<String>> captures() {
@@ -388,6 +448,16 @@ public final class TemplateMatcher {
                 values.put(entry.getKey(), Collections.unmodifiableList(slotValues));
             }
             return Collections.unmodifiableMap(values);
+        }
+
+        private int capturedTextLength() {
+            int length = 0;
+            for (List<SlotCapture> captures : slotCaptures.values()) {
+                for (SlotCapture capture : captures) {
+                    length += capture.end() - capture.start();
+                }
+            }
+            return length;
         }
     }
 
@@ -430,22 +500,38 @@ public final class TemplateMatcher {
     private static final class TemplateMeta {
         private final String category;
         private final String templateId;
+        private final int priority;
 
-        private TemplateMeta(String category, String templateId) {
+        private TemplateMeta(String category, String templateId, int priority) {
             this.category = category;
             this.templateId = templateId;
+            this.priority = priority;
         }
     }
 
     private static final class SequenceTemplate {
         private final String category;
         private final String templateId;
+        private final int priority;
         private final List<String> slotNames;
 
-        private SequenceTemplate(String category, String templateId, List<String> slotNames) {
+        private SequenceTemplate(String category, String templateId, int priority, List<String> slotNames) {
             this.category = category;
             this.templateId = templateId;
+            this.priority = priority;
             this.slotNames = slotNames;
+        }
+    }
+
+    private static final class SlotHit {
+        private final String value;
+        private final int start;
+        private final int end;
+
+        private SlotHit(String value, int start, int end) {
+            this.value = value;
+            this.start = start;
+            this.end = end;
         }
     }
 
