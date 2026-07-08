@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TemplateMatcherApiTest {
@@ -50,5 +51,34 @@ class TemplateMatcherApiTest {
     void explicitSlotSequenceRejectsFixedTextOtherThanUnderscore() {
         assertThrows(IllegalArgumentException.class,
                 () -> RulePattern.slotSequence("bad", "bad-pattern", "[like]-[sing]"));
+    }
+
+    @Test
+    void builtMatcherIsNotChangedByLaterBuilderMutations() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "first", "我是[people]"));
+
+        TemplateMatcher first = builder.build();
+        builder.addPattern(RulePattern.exact("profile", "later", "他是[people]"));
+        TemplateMatcher second = builder.build();
+
+        assertTrue(first.match("他是中国人").isEmpty());
+        assertEquals(1, second.match("他是中国人").size());
+    }
+
+    @Test
+    void higherPriorityResultsAreReturnedFirst() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "low", "我是[people]", 0))
+                .addPattern(RulePattern.exact("profile", "high", "我是[people]", 10))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match("我是中国人");
+
+        assertEquals(2, results.size());
+        assertEquals("high", results.get(0).templateId());
+        assertEquals("low", results.get(1).templateId());
     }
 }
