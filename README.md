@@ -319,12 +319,20 @@ addPattern(RulePattern pattern)
 .addPattern(RulePattern.slotSequence("music", "like-sing", "[like]_[sing]"))
 ```
 
+如果多个模板都命中同一段输入，可以给规则设置优先级。数字越大，结果越靠前：
+
+```java
+.addPattern(RulePattern.exact("profile", "low", "我是[people]", 0))
+.addPattern(RulePattern.exact("profile", "high", "我是[people]", 10))
+```
+
 参数含义：
 
 - `category`：模板分类，例如 `music`、`travel`、`profile`。
 - `templateId`：模板唯一 ID。
 - `pattern`：模板内容，支持固定文本和 `[slotName]`。
 - `mode`：模板模式，推荐显式使用 `PatternMode.EXACT` 或 `PatternMode.SLOT_SEQUENCE`。
+- `priority`：可选优先级，默认为 `0`，值越大排序越靠前。
 
 为了兼容旧代码，仍然保留：
 
@@ -346,6 +354,7 @@ List<TemplateMatcher.MatchResult> results = matcher.match(input);
 category()
 templateId()
 mode()
+priority()
 captures()
 slotCaptures()
 ```
@@ -361,7 +370,8 @@ slotCaptures()
 - 槽位名只允许字母、数字、下划线和中划线。
 - 槽位序列模式只把 `_` 作为分隔符；如果 pattern 里出现其他固定字符，就会按严格模板处理。
 - 当严格模板匹配成功时，不会继续执行槽位序列匹配。
-- 当前槽位序列匹配使用逐位置扫描，槽位和字典规模很大时，可以进一步升级为 Aho-Corasick 自动机。
+- `build()` 会生成当前 Builder 状态的快照；后续继续给 Builder 添加模板不会影响已经构建好的 matcher。
+- 槽位序列匹配会先为输入预扫描每个槽位的命中项，避免多个 sequence 模板重复扫描同一段文本。槽位和字典规模进一步增大时，可以升级为 Aho-Corasick 自动机。
 
 ## 示例测试
 
