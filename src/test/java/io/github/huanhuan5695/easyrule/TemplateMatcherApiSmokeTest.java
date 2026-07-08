@@ -18,9 +18,11 @@ public class TemplateMatcherApiSmokeTest {
         strictTemplateIdValidationFailsForDuplicateIdsInSameCategory();
         strictTemplateIdValidationAllowsSameIdInDifferentCategories();
         builderCanRegisterDictionariesAndPatternsInBatches();
+        builderCanRegisterTrieDictionariesInBatches();
         builderBatchRegistrationRejectsNullInputs();
         failedBatchPatternRegistrationDoesNotPartiallyMutateBuilder();
         failedBatchDictionaryRegistrationDoesNotPartiallyMutateBuilder();
+        failedBatchTrieDictionaryRegistrationDoesNotPartiallyMutateBuilder();
         legacyAddTemplateRejectsNullPatternConsistently();
         duplicateRulePatternsDoNotDuplicateResults();
         matchOptionsCanForceSlotSequenceMode();
@@ -198,6 +200,29 @@ public class TemplateMatcherApiSmokeTest {
                 "batch slot sequence pattern matches");
     }
 
+    private static void builderCanRegisterTrieDictionariesInBatches() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictSlotValidation()
+                .addSlotDictionaryTries(Map.of(
+                        "people", DoubleArrayTrie.build(Arrays.asList("中国人")),
+                        "song", DoubleArrayTrie.build(Arrays.asList("青花瓷"))))
+                .addPatterns(Arrays.asList(
+                        RulePattern.exact("music", "person-song", "[people]喜欢唱[song]"),
+                        RulePattern.slotSequence("music", "sequence", "[people]_[song]")))
+                .build();
+
+        assertEquals(
+                "person-song",
+                matcher.match("中国人喜欢唱青花瓷").get(0).templateId(),
+                "batch trie exact pattern matches");
+        assertEquals(
+                1,
+                matcher.match(
+                        "他说中国人唱青花瓷",
+                        MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).size(),
+                "batch trie slot sequence pattern matches");
+    }
+
     private static void builderBatchRegistrationRejectsNullInputs() {
         TemplateMatcher.Builder builder = TemplateMatcher.builder();
 
@@ -211,6 +236,11 @@ public class TemplateMatcherApiSmokeTest {
                 null,
                 () -> builder.addPatterns(null),
                 "batch patterns should reject null input");
+        assertThrows(
+                IllegalArgumentException.class,
+                null,
+                () -> builder.addSlotDictionaryTries(null),
+                "batch trie dictionaries should reject null input");
     }
 
     private static void failedBatchPatternRegistrationDoesNotPartiallyMutateBuilder() {
@@ -249,6 +279,29 @@ public class TemplateMatcherApiSmokeTest {
             return;
         }
         throw new AssertionError("failed dictionary batch should not retain previous entries");
+    }
+
+    private static void failedBatchTrieDictionaryRegistrationDoesNotPartiallyMutateBuilder() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder();
+        Map<String, DoubleArrayTrie> dictionaries = new LinkedHashMap<>();
+        dictionaries.put("people", DoubleArrayTrie.build(Arrays.asList("中国人")));
+        dictionaries.put("bad", null);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                "trie is required",
+                () -> builder.addSlotDictionaryTries(dictionaries),
+                "batch trie dictionary failure should reject null trie");
+
+        try {
+            builder.strictSlotValidation()
+                    .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                    .build();
+        } catch (IllegalStateException expected) {
+            assertEquals("missing slot dictionaries: people", expected.getMessage(), "failed trie batch atomic");
+            return;
+        }
+        throw new AssertionError("failed trie dictionary batch should not retain previous entries");
     }
 
     private static void legacyAddTemplateRejectsNullPatternConsistently() {

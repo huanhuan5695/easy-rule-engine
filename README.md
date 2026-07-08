@@ -393,6 +393,16 @@ addSlotDictionary(String slotName, Collection<String> values)
 .addSlotDictionary("city", cityTrie)
 ```
 
+如果字典由外部系统预构建并批量加载，可以使用：
+
+```java
+.addSlotDictionaryTries(Map.of(
+        "city", cityTrie,
+        "song", songTrie))
+```
+
+批量 trie 注册同样会先校验全部输入；如果其中一项非法，本次批量调用不会写入任何字典。
+
 ### 添加模板
 
 ```java

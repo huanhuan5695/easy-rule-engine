@@ -345,6 +345,31 @@ public final class TemplateMatcher {
         }
 
         /**
+         * Adds or replaces multiple slot dictionaries from existing tries.
+         *
+         * <p>All entries are validated before this builder is mutated, so a
+         * failed batch does not leave partially registered dictionaries.
+         *
+         * @param dictionaries map from slot name to immutable dictionary trie
+         * @return this builder
+         */
+        public Builder addSlotDictionaryTries(Map<String, ? extends DoubleArrayTrie> dictionaries) {
+            if (dictionaries == null) {
+                throw new IllegalArgumentException("dictionaries is required");
+            }
+            for (Map.Entry<String, ? extends DoubleArrayTrie> entry : dictionaries.entrySet()) {
+                validateSlotName(entry.getKey());
+                if (entry.getValue() == null) {
+                    throw new IllegalArgumentException("trie is required");
+                }
+            }
+            for (Map.Entry<String, ? extends DoubleArrayTrie> entry : dictionaries.entrySet()) {
+                addSlotDictionary(entry.getKey(), entry.getValue());
+            }
+            return this;
+        }
+
+        /**
          * Adds a template and infers its mode from the pattern shape.
          *
          * @param category result category

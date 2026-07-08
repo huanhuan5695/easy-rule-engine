@@ -162,11 +162,30 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void builderCanRegisterTrieDictionariesInBatches() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictSlotValidation()
+                .addSlotDictionaryTries(Map.of(
+                        "people", DoubleArrayTrie.build(Arrays.asList("中国人")),
+                        "song", DoubleArrayTrie.build(Arrays.asList("青花瓷"))))
+                .addPatterns(Arrays.asList(
+                        RulePattern.exact("music", "person-song", "[people]喜欢唱[song]"),
+                        RulePattern.slotSequence("music", "sequence", "[people]_[song]")))
+                .build();
+
+        assertEquals("person-song", matcher.match("中国人喜欢唱青花瓷").get(0).templateId());
+        assertEquals(1, matcher.match(
+                "他说中国人唱青花瓷",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).size());
+    }
+
+    @Test
     void builderBatchRegistrationRejectsNullInputs() {
         TemplateMatcher.Builder builder = TemplateMatcher.builder();
 
         assertThrows(IllegalArgumentException.class, () -> builder.addSlotDictionaries(null));
         assertThrows(IllegalArgumentException.class, () -> builder.addPatterns(null));
+        assertThrows(IllegalArgumentException.class, () -> builder.addSlotDictionaryTries(null));
     }
 
     @Test
@@ -189,6 +208,22 @@ class TemplateMatcherApiTest {
         dictionaries.put("bad", null);
 
         assertThrows(IllegalArgumentException.class, () -> builder.addSlotDictionaries(dictionaries));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> builder.strictSlotValidation()
+                        .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                        .build());
+        assertEquals("missing slot dictionaries: people", exception.getMessage());
+    }
+
+    @Test
+    void failedBatchTrieDictionaryRegistrationDoesNotPartiallyMutateBuilder() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder();
+        Map<String, DoubleArrayTrie> dictionaries = new LinkedHashMap<>();
+        dictionaries.put("people", DoubleArrayTrie.build(Arrays.asList("中国人")));
+        dictionaries.put("bad", null);
+
+        assertThrows(IllegalArgumentException.class, () -> builder.addSlotDictionaryTries(dictionaries));
 
         IllegalStateException exception = assertThrows(IllegalStateException.class,
                 () -> builder.strictSlotValidation()
