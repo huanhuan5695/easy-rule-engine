@@ -1,19 +1,21 @@
 ## Summary
 
-Describe what changed and why.
+- What changed:
+- Why it changed:
 
 ## Validation
 
 - [ ] `mvn test`
+- [ ] `mvn package`
 - [ ] `make smoke`
-- [ ] `make benchmark` if matching performance changed
+- [ ] `make example`
 
 ## Compatibility
 
-- [ ] Public API is backward compatible
-- [ ] Behavior changes are documented
-- [ ] README or docs were updated when user-facing behavior changed
+- [ ] No public API or behavior change
+- [ ] Backward-compatible API or behavior change
+- [ ] Breaking change documented below
 
 ## Notes
 
-Mention follow-up work, known limitations, or benchmark results.
+Add migration notes, benchmark results, screenshots, or follow-up work when relevant.

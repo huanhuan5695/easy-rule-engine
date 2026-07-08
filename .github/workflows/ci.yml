@@ -2,30 +2,37 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   test:
+    name: Java 11
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "11"
+          java-version: 11
           cache: maven
 
       - name: Run Maven tests
         run: mvn -B test
 
-      - name: Build release artifacts
+      - name: Build package
         run: mvn -B -DskipTests package
 
-      - name: Run no-dependency smoke tests
+      - name: Run smoke tests
         run: make smoke
+
+      - name: Run quick start example
+        run: make example

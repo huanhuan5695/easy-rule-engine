@@ -1,24 +1,26 @@
-name: Bug report
-description: Report incorrect matching, API behavior, or documentation.
+name: Bug Report
+description: Report incorrect matching, parsing, packaging, or documentation behavior.
 title: "[Bug]: "
-labels: ["bug"]
+labels:
+  - bug
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug. Please include a minimal reproducible example.
-  - type: textarea
-    id: summary
+        Thanks for reporting a problem. Please include a minimal reproduction when possible.
+  - type: input
+    id: version
     attributes:
-      label: Summary
-      description: What went wrong?
+      label: Version or commit
+      description: Which release, snapshot, or commit are you using?
+      placeholder: 0.1.0-SNAPSHOT or commit SHA
     validations:
       required: true
   - type: textarea
-    id: reproduce
+    id: reproduction
     attributes:
-      label: Reproduction
-      description: Provide the smallest matcher setup and input text that reproduces the issue.
+      label: Minimal reproduction
+      description: Provide the smallest matcher, dictionaries, patterns, and input that reproduce the issue.
       render: java
     validations:
       required: true
@@ -34,16 +36,9 @@ body:
       label: Actual behavior
     validations:
       required: true
-  - type: input
-    id: version
-    attributes:
-      label: Version or commit
-      placeholder: "0.1.0-SNAPSHOT or commit SHA"
-    validations:
-      required: true
   - type: textarea
-    id: validation
+    id: environment
     attributes:
-      label: Validation
-      description: Include output from `mvn test` or `make smoke` if available.
-      render: text
+      label: Environment
+      description: Java version, OS, build tool, and any relevant configuration.
+      placeholder: Java 11, macOS 15, Maven 3.9.x

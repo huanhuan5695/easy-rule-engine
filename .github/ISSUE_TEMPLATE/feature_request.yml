@@ -1,27 +1,28 @@
-name: Feature request
-description: Propose a new matcher capability, API option, or performance improvement.
+name: Feature Request
+description: Suggest a matcher capability, API improvement, or tooling enhancement.
 title: "[Feature]: "
-labels: ["enhancement"]
+labels:
+  - enhancement
 body:
   - type: textarea
     id: problem
     attributes:
       label: Problem
-      description: What use case is not covered today?
+      description: What are you trying to accomplish, and what is hard today?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposal
-      description: Describe the API or behavior you want.
+      label: Proposed solution
+      description: Describe the API, behavior, or workflow you want.
     validations:
       required: true
   - type: textarea
     id: example
     attributes:
-      label: Example
-      description: Show a pattern, dictionaries, input text, and expected output.
+      label: Example usage
+      description: Show the desired usage if this is an API or matcher behavior request.
       render: java
   - type: dropdown
     id: compatibility
@@ -30,10 +31,6 @@ body:
       options:
         - Backward compatible
         - Potentially breaking
-        - Unsure
+        - Not sure
     validations:
       required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
