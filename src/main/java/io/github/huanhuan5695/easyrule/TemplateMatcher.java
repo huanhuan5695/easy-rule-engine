@@ -92,37 +92,35 @@ public final class TemplateMatcher {
         int effectiveMaxStates = effectiveOptions.maxStates() == null
                 ? maxStates
                 : Math.min(maxStates, effectiveOptions.maxStates());
+        StateBudget stateBudget = new StateBudget(effectiveMaxStates);
 
         if (effectiveOptions.mode() == MatchMode.EXACT_ONLY) {
-            return matchExactTemplates(input, effectiveMaxResults, effectiveMaxStates);
+            return matchExactTemplates(input, effectiveMaxResults, stateBudget);
         }
         if (effectiveOptions.mode() == MatchMode.SLOT_SEQUENCE_ONLY) {
-            return matchSlotSequences(input, effectiveMaxResults, effectiveMaxStates);
+            return matchSlotSequences(input, effectiveMaxResults, stateBudget);
         }
         if (effectiveOptions.mode() == MatchMode.ALL) {
             List<MatchResult> results = new ArrayList<>();
-            results.addAll(matchExactTemplates(input, maxResults, effectiveMaxStates));
-            results.addAll(matchSlotSequences(input, maxResults, effectiveMaxStates));
+            results.addAll(matchExactTemplates(input, maxResults, stateBudget));
+            results.addAll(matchSlotSequences(input, maxResults, stateBudget));
             return sortAndLimit(results, effectiveMaxResults);
         }
 
-        List<MatchResult> exactResults = matchExactTemplates(input, effectiveMaxResults, effectiveMaxStates);
+        List<MatchResult> exactResults = matchExactTemplates(input, effectiveMaxResults, stateBudget);
         if (!exactResults.isEmpty()) {
             return exactResults;
         }
-        return matchSlotSequences(input, effectiveMaxResults, effectiveMaxStates);
+        return matchSlotSequences(input, effectiveMaxResults, stateBudget);
     }
 
-    private List<MatchResult> matchExactTemplates(String input, int resultLimit, int stateLimit) {
+    private List<MatchResult> matchExactTemplates(String input, int resultLimit, StateBudget stateBudget) {
         List<MatchResult> results = new ArrayList<>();
         ArrayDeque<MatchState> queue = new ArrayDeque<>();
         queue.add(new MatchState(root, 0, new LinkedHashMap<String, List<SlotCapture>>()));
 
-        int visitedStates = 0;
         while (!queue.isEmpty()) {
-            if (++visitedStates > stateLimit) {
-                throw new IllegalStateException("exact template matching exceeded maxStates=" + stateLimit);
-            }
+            stateBudget.visit("exact template matching");
 
             MatchState state = queue.removeFirst();
             if (state.inputPos == input.length() && !state.node.outputs.isEmpty()) {
@@ -168,9 +166,8 @@ public final class TemplateMatcher {
         return sortAndLimit(results, resultLimit);
     }
 
-    private List<MatchResult> matchSlotSequences(String input, int resultLimit, int stateLimit) {
+    private List<MatchResult> matchSlotSequences(String input, int resultLimit, StateBudget stateBudget) {
         List<MatchResult> results = new ArrayList<>();
-        int visitedStates = 0;
         Map<String, List<SlotHit>> hitsBySlot = collectSlotHits(input);
 
         for (SequenceTemplate template : sequenceTemplates) {
@@ -178,9 +175,7 @@ public final class TemplateMatcher {
             queue.add(new SequenceState(0, 0, new LinkedHashMap<String, List<SlotCapture>>()));
 
             while (!queue.isEmpty()) {
-                if (++visitedStates > stateLimit) {
-                    throw new IllegalStateException("slot sequence matching exceeded maxStates=" + stateLimit);
-                }
+                stateBudget.visit("slot sequence matching");
 
                 SequenceState state = queue.removeFirst();
                 if (state.slotIndex == template.slotNames.size()) {
@@ -902,6 +897,21 @@ public final class TemplateMatcher {
         private SlotEdge(String slotName, Node next) {
             this.slotName = slotName;
             this.next = next;
+        }
+    }
+
+    private static final class StateBudget {
+        private final int limit;
+        private int visited;
+
+        private StateBudget(int limit) {
+            this.limit = limit;
+        }
+
+        private void visit(String phase) {
+            if (++visited > limit) {
+                throw new IllegalStateException(phase + " exceeded maxStates=" + limit);
+            }
         }
     }
 

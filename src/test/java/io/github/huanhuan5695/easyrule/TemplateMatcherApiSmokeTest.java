@@ -15,6 +15,7 @@ public class TemplateMatcherApiSmokeTest {
         matchOptionsCanForceSlotSequenceMode();
         matchOptionsCanLimitResultsPerCall();
         matchOptionsCanLimitStatesPerCall();
+        allModeSharesStateBudgetAcrossMatchingPhases();
         matchResultsListIsImmutable();
         slotSequenceFindsOverlappingValuesAcrossSlots();
 
@@ -162,6 +163,24 @@ public class TemplateMatcherApiSmokeTest {
                 "exact template matching exceeded maxStates=1",
                 () -> matcher.match("我是中国人", MatchOptions.builder().maxStates(1).build()),
                 "per-call max states should fail fast");
+    }
+
+    private static void allModeSharesStateBudgetAcrossMatchingPhases() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxStates(100)
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addPattern(RulePattern.exact("exact", "miss", "不会命中"))
+                .addPattern(RulePattern.slotSequence("sequence", "like-sing", "[like]_[sing]"))
+                .build();
+
+        assertThrows(
+                IllegalStateException.class,
+                "slot sequence matching exceeded maxStates=1",
+                () -> matcher.match(
+                        "完全不相关",
+                        MatchOptions.builder().mode(MatchMode.ALL).maxStates(1).build()),
+                "all mode should share one state budget across phases");
     }
 
     private static void matchResultsListIsImmutable() {

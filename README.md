@@ -470,7 +470,7 @@ List<TemplateMatcher.MatchResult> results = matcher.match(
 - `SLOT_SEQUENCE_ONLY`：只执行槽位序列匹配。
 - `ALL`：同时返回严格模板和槽位序列结果，再统一排序和裁剪。
 
-`maxResults` 和 `maxStates` 的单次调用配置只能收紧 matcher 构建时的全局限制，不能绕过全局限制。服务化接入时可以按请求类型设置更小的 `maxStates`，避免复杂输入占用过多计算。
+`maxResults` 和 `maxStates` 的单次调用配置只能收紧 matcher 构建时的全局限制，不能绕过全局限制。`maxStates` 是整个 `match()` 调用共享的状态预算；即使 `ALL` 模式同时执行严格模板和槽位序列匹配，也不会重新计数。服务化接入时可以按请求类型设置更小的 `maxStates`，避免复杂输入占用过多计算。
 
 `MatchResult` 提供：
 
@@ -494,7 +494,7 @@ slotCaptures()
 - 槽位名只允许字母、数字、下划线和中划线。
 - 槽位序列模式只把 `_` 作为分隔符；如果 pattern 里出现其他固定字符，就会按严格模板处理。
 - 当严格模板匹配成功时，不会继续执行槽位序列匹配。
-- `MatchOptions.maxStates()` 可以为单次调用设置更小的状态访问上限；实际上限取构建期上限和单次调用上限的较小值。
+- `MatchOptions.maxStates()` 可以为单次调用设置更小的状态访问上限；实际上限取构建期上限和单次调用上限的较小值，并在本次 `match()` 的所有匹配阶段共享。
 - 生产环境建议启用 `strictSlotValidation()`，在构建期发现缺失的槽位字典。
 - `build()` 会生成当前 Builder 状态的快照；后续继续给 Builder 添加模板不会影响已经构建好的 matcher。
 - `match()` 返回的结果列表、槽位 map 和槽位列表都是不可变集合，调用方可以安全共享结果对象。

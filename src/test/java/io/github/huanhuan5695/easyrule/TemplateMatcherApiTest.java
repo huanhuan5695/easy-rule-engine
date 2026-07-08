@@ -170,6 +170,24 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void allModeSharesStateBudgetAcrossMatchingPhases() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxStates(100)
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addPattern(RulePattern.exact("exact", "miss", "不会命中"))
+                .addPattern(RulePattern.slotSequence("sequence", "like-sing", "[like]_[sing]"))
+                .build();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> matcher.match(
+                        "完全不相关",
+                        MatchOptions.builder().mode(MatchMode.ALL).maxStates(1).build()));
+
+        assertEquals("slot sequence matching exceeded maxStates=1", exception.getMessage());
+    }
+
+    @Test
     void matchResultsListIsImmutable() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("people", Arrays.asList("中国人"))
