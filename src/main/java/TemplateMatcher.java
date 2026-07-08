@@ -61,7 +61,11 @@ public final class TemplateMatcher {
             MatchState state = queue.removeFirst();
             if (state.inputPos == input.length() && !state.node.outputs.isEmpty()) {
                 for (TemplateMeta output : state.node.outputs) {
-                    results.add(new MatchResult(output.category, output.templateId, state.captures));
+                    results.add(new MatchResult(
+                            output.category,
+                            output.templateId,
+                            PatternMode.EXACT,
+                            state.captures));
                     if (results.size() >= maxResults) {
                         return results;
                     }
@@ -115,7 +119,11 @@ public final class TemplateMatcher {
 
                 SequenceState state = queue.removeFirst();
                 if (state.slotIndex == template.slotNames.size()) {
-                    results.add(new MatchResult(template.category, template.templateId, state.captures));
+                    results.add(new MatchResult(
+                            template.category,
+                            template.templateId,
+                            PatternMode.SLOT_SEQUENCE,
+                            state.captures));
                     if (results.size() >= maxResults) {
                         return results;
                     }
@@ -187,19 +195,24 @@ public final class TemplateMatcher {
         }
 
         public Builder addTemplate(String category, String templateId, String pattern) {
-            if (category == null || category.isEmpty()) {
-                throw new IllegalArgumentException("category is required");
-            }
-            if (templateId == null || templateId.isEmpty()) {
-                throw new IllegalArgumentException("templateId is required");
-            }
-            if (pattern == null || pattern.isEmpty()) {
+            return addPattern(RulePattern.of(category, templateId, pattern, inferMode(pattern)));
+        }
+
+        public Builder addPattern(RulePattern pattern) {
+            if (pattern == null) {
                 throw new IllegalArgumentException("pattern is required");
             }
-
-            List<Token> tokens = parsePattern(pattern);
-            if (isSlotSequencePattern(tokens)) {
-                sequenceTemplates.add(new SequenceTemplate(category, templateId, slotNames(tokens)));
+            List<Token> tokens = parsePattern(pattern.pattern());
+            if (pattern.mode() == PatternMode.SLOT_SEQUENCE) {
+                if (!isSlotSequencePattern(tokens)) {
+                    throw new IllegalArgumentException(
+                            "slot sequence pattern can only contain slots and '_' separators: "
+                                    + pattern.pattern());
+                }
+                sequenceTemplates.add(new SequenceTemplate(
+                        pattern.category(),
+                        pattern.templateId(),
+                        slotNames(tokens)));
                 return this;
             }
 
@@ -211,8 +224,16 @@ public final class TemplateMatcher {
                     node = findOrCreateSlotEdge(node, token.slotName).next;
                 }
             }
-            node.outputs.add(new TemplateMeta(category, templateId));
+            node.outputs.add(new TemplateMeta(pattern.category(), pattern.templateId()));
             return this;
+        }
+
+        private static PatternMode inferMode(String pattern) {
+            List<Token> tokens = parsePattern(pattern);
+            if (isSlotSequencePattern(tokens)) {
+                return PatternMode.SLOT_SEQUENCE;
+            }
+            return PatternMode.EXACT;
         }
 
         public Builder maxStates(int maxStates) {
@@ -312,12 +333,18 @@ public final class TemplateMatcher {
     public static final class MatchResult {
         private final String category;
         private final String templateId;
+        private final PatternMode mode;
         private final Map<String, List<SlotCapture>> slotCaptures;
         private final Map<String, List<String>> captures;
 
-        private MatchResult(String category, String templateId, Map<String, List<SlotCapture>> slotCaptures) {
+        private MatchResult(
+                String category,
+                String templateId,
+                PatternMode mode,
+                Map<String, List<SlotCapture>> slotCaptures) {
             this.category = category;
             this.templateId = templateId;
+            this.mode = mode;
             this.slotCaptures = freezeSlotCaptures(slotCaptures);
             this.captures = freezeValues(this.slotCaptures);
         }
@@ -328,6 +355,10 @@ public final class TemplateMatcher {
 
         public String templateId() {
             return templateId;
+        }
+
+        public PatternMode mode() {
+            return mode;
         }
 
         public Map<String, List<String>> captures() {
