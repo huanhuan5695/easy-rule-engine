@@ -25,7 +25,9 @@ EXAMPLE_SOURCES = \
 	$(MAIN_SOURCES) \
 	examples/QuickStart.java
 
-.PHONY: smoke example benchmark clean
+.PHONY: check smoke example javadocs benchmark clean
+
+check: smoke example javadocs
 
 smoke:
 	javac -d $(SMOKE_BUILD_DIR) $(SMOKE_SOURCES)
@@ -37,6 +39,9 @@ smoke:
 example:
 	javac -d $(EXAMPLE_BUILD_DIR) $(EXAMPLE_SOURCES)
 	java -cp $(EXAMPLE_BUILD_DIR) QuickStart
+
+javadocs:
+	javadoc -quiet -d /tmp/easy-rule-javadoc src/main/java/io/github/huanhuan5695/easyrule/*.java
 
 benchmark:
 	javac -d $(BENCH_BUILD_DIR) $(BENCH_SOURCES)

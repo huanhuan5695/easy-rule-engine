@@ -84,7 +84,7 @@ mvn package
 如果本机没有 Maven，可以在项目根目录执行：
 
 ```bash
-make smoke
+make check
 ```
 
 期望输出：
@@ -102,6 +102,7 @@ All TemplateMatcherPackage smoke tests passed.
 mvn -B test
 mvn -B -DskipTests package
 make smoke
+make example
 ```
 
 `mvn package` 会生成普通 jar、sources jar 和 javadocs jar，便于后续发布到 Maven Central。

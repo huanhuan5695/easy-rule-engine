@@ -10,11 +10,10 @@ Use Maven when available:
 mvn test
 ```
 
-If Maven is not installed, run the no-dependency smoke tests:
+If Maven is not installed, run the no-dependency local checks:
 
 ```bash
-make example
-make smoke
+make check
 ```
 
 Run the local benchmark with:
