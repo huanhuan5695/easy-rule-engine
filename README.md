@@ -1,5 +1,8 @@
 # 模板槽位匹配器
 
+[![CI](https://github.com/huanhuan5695/easy-rule-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/huanhuan5695/easy-rule-engine/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 这是一个基于 Java 的模板匹配示例项目，用于把用户输入文本快速匹配到业务模板，并返回模板所属分类、模板唯一 ID，以及命中的槽位值和槽位在原文中的位置。
 
 项目核心适合这些场景：
@@ -13,23 +16,63 @@
 
 ```text
 pom.xml                # Maven 构建配置，包含 JUnit 5 测试依赖
+Makefile               # 无 Maven 环境下的 smoke test 和 benchmark 快捷命令
+LICENSE                # MIT 许可证
+CONTRIBUTING.md        # 贡献指南
+docs/performance.md    # 性能测试说明
+docs/release.md        # 发布流程说明
 
-src/main/java/
+examples/
+  QuickStart.java      # 可直接运行的入门示例
+
+src/main/java/io/github/huanhuan5695/easyrule/
   DoubleArrayTrie.java     # 双数组前缀树，用于高效字典前缀匹配
+  MatchMode.java           # 单次匹配策略枚举
+  MatchOptions.java        # 单次匹配选项
   PatternMode.java         # 模板匹配模式枚举
   RulePattern.java         # 稳定的规则模板描述对象
   TemplateMatcher.java     # 模板匹配器，支持严格模板和槽位序列两种模式
 
-src/test/java/
+src/test/java/io/github/huanhuan5695/easyrule/
   DoubleArrayTrieTest.java # 双数组前缀树测试入口
   TemplateMatcherTest.java # 模板匹配器测试入口
   TemplateMatcherApiTest.java      # JUnit 5 API 测试
   TemplateMatcherApiSmokeTest.java # 无依赖 API smoke test
+
+src/test/java/
+  TemplateMatcherPackageSmokeTest.java # 外部消费者 import 验证
+
+src/benchmark/java/
+  TemplateMatcherBenchmark.java # 无依赖本地 benchmark
 ```
 
 项目提供 Maven 工程配置；如果本机暂时没有 Maven，也可以使用 `javac` 和 `java` 运行无依赖测试入口。
 
+## Maven 坐标
+
+当前版本尚未发布到 Maven Central。作为本地依赖使用时，可以先安装到本地仓库：
+
+```bash
+mvn install
+```
+
+计划发布坐标：
+
+```xml
+<dependency>
+  <groupId>io.github.huanhuan5695</groupId>
+  <artifactId>easy-rule-engine</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
 ## 快速运行
+
+运行入门示例：
+
+```bash
+make example
+```
 
 推荐使用 Maven：
 
@@ -40,10 +83,7 @@ mvn test
 如果本机没有 Maven，可以在项目根目录执行：
 
 ```bash
-javac -d /tmp/dat-test src/main/java/DoubleArrayTrie.java src/main/java/PatternMode.java src/main/java/RulePattern.java src/main/java/TemplateMatcher.java src/test/java/DoubleArrayTrieTest.java src/test/java/TemplateMatcherTest.java src/test/java/TemplateMatcherApiSmokeTest.java
-java -cp /tmp/dat-test DoubleArrayTrieTest
-java -cp /tmp/dat-test TemplateMatcherTest
-java -cp /tmp/dat-test TemplateMatcherApiSmokeTest
+make smoke
 ```
 
 期望输出：
@@ -52,13 +92,43 @@ java -cp /tmp/dat-test TemplateMatcherApiSmokeTest
 All DoubleArrayTrie tests passed.
 All TemplateMatcher tests passed.
 All TemplateMatcherApi smoke tests passed.
+All TemplateMatcherPackage smoke tests passed.
 ```
+
+远程仓库包含 GitHub Actions CI，push 或 pull request 时会使用 Java 11 执行：
+
+```bash
+mvn test
+```
+
+## 性能测试
+
+项目提供一个无依赖 benchmark，用于在同一机器上比较优化前后的相对性能：
+
+```bash
+make benchmark
+```
+
+更多说明见 `docs/performance.md`。
+
+## 贡献与发布
+
+- 贡献流程见 `CONTRIBUTING.md`。
+- 性能测试说明见 `docs/performance.md`。
+- 发布检查清单见 `docs/release.md`。
+- GitHub issue 和 pull request 模板位于 `.github/`。
 
 ## 基本用法
 
-先构建槽位字典，再注册模板：
+完整可运行示例见 `examples/QuickStart.java`。核心流程是先构建槽位字典，再注册模板：
 
 ```java
+import io.github.huanhuan5695.easyrule.RulePattern;
+import io.github.huanhuan5695.easyrule.TemplateMatcher;
+
+import java.util.Arrays;
+import java.util.List;
+
 TemplateMatcher matcher = TemplateMatcher.builder()
         .addSlotDictionary("people", Arrays.asList("中国人", "美国人", "学生"))
         .addSlotDictionary("song", Arrays.asList("青花瓷", "稻香"))
@@ -255,7 +325,9 @@ TEXT("歌")
 like -> sing
 ```
 
-匹配时从输入中按顺序寻找各槽位字典的命中项。每找到一个槽位，就记录它的值、起始位置和结束位置，然后继续寻找下一个槽位。
+匹配时会先为槽位序列所需的字典构建共享扫描索引。通过 `Collection<String>` 添加的槽位字典会进入该索引，输入文本只需要扫描一次，就能收集多个槽位的命中项。每找到一个槽位，就记录它的值、起始位置和结束位置，然后继续推进下一个槽位。
+
+如果调用方通过 `addSlotDictionary(String, DoubleArrayTrie)` 直接传入已经构建好的双数组前缀树，该槽位会走兼容路径：只在需要该槽位时单独扫描。这样可以保留高级用法，同时让常规用法获得更好的槽位序列匹配性能。
 
 该模式允许输入前后有额外文本，例如：
 
@@ -342,11 +414,55 @@ addTemplate(String category, String templateId, String pattern)
 
 该方法会根据 pattern 形态自动推断模式。
 
+### 构建期严格校验
+
+默认情况下，模板引用了不存在的槽位字典时，匹配阶段会返回空结果。生产环境建议开启严格校验，让配置错误在 `build()` 阶段直接暴露：
+
+```java
+import io.github.huanhuan5695.easyrule.RulePattern;
+import io.github.huanhuan5695.easyrule.TemplateMatcher;
+
+import java.util.Arrays;
+
+TemplateMatcher matcher = TemplateMatcher.builder()
+        .strictSlotValidation()
+        .addSlotDictionary("people", Arrays.asList("中国人"))
+        .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+        .build();
+```
+
+如果缺少槽位字典，例如模板引用了 `[people]` 但没有添加 `people` 字典，会抛出：
+
+```text
+missing slot dictionaries: people
+```
+
 ### 匹配输入
 
 ```java
 List<TemplateMatcher.MatchResult> results = matcher.match(input);
 ```
+
+默认匹配策略是 `EXACT_THEN_SLOT_SEQUENCE`：先跑严格模板；如果严格模板没有命中，再跑槽位序列。也可以在单次调用时指定策略和返回数量：
+
+```java
+import io.github.huanhuan5695.easyrule.MatchMode;
+import io.github.huanhuan5695.easyrule.MatchOptions;
+
+List<TemplateMatcher.MatchResult> results = matcher.match(
+        input,
+        MatchOptions.builder()
+                .mode(MatchMode.SLOT_SEQUENCE_ONLY)
+                .maxResults(5)
+                .build());
+```
+
+可用策略：
+
+- `EXACT_THEN_SLOT_SEQUENCE`：默认策略，精确优先，失败后槽位序列兜底。
+- `EXACT_ONLY`：只执行严格模板匹配。
+- `SLOT_SEQUENCE_ONLY`：只执行槽位序列匹配。
+- `ALL`：同时返回严格模板和槽位序列结果，再统一排序和裁剪。
 
 `MatchResult` 提供：
 
@@ -370,15 +486,17 @@ slotCaptures()
 - 槽位名只允许字母、数字、下划线和中划线。
 - 槽位序列模式只把 `_` 作为分隔符；如果 pattern 里出现其他固定字符，就会按严格模板处理。
 - 当严格模板匹配成功时，不会继续执行槽位序列匹配。
+- 生产环境建议启用 `strictSlotValidation()`，在构建期发现缺失的槽位字典。
 - `build()` 会生成当前 Builder 状态的快照；后续继续给 Builder 添加模板不会影响已经构建好的 matcher。
-- 槽位序列匹配会先为输入预扫描每个槽位的命中项，避免多个 sequence 模板重复扫描同一段文本。槽位和字典规模进一步增大时，可以升级为 Aho-Corasick 自动机。
+- 槽位序列匹配会基于共享扫描索引收集命中项，避免多个 sequence 模板重复扫描同一段文本。直接传入 `DoubleArrayTrie` 的槽位会自动回退到逐槽扫描。
 
 ## 示例测试
 
 更多示例可以查看：
 
-- `src/test/java/DoubleArrayTrieTest.java`
-- `src/test/java/TemplateMatcherTest.java`
+- `src/test/java/io/github/huanhuan5695/easyrule/DoubleArrayTrieTest.java`
+- `src/test/java/io/github/huanhuan5695/easyrule/TemplateMatcherTest.java`
+- `src/test/java/TemplateMatcherPackageSmokeTest.java`
 
 这些测试展示了：
 

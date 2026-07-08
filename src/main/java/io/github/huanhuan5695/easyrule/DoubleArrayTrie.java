@@ -1,3 +1,5 @@
+package io.github.huanhuan5695.easyrule;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;

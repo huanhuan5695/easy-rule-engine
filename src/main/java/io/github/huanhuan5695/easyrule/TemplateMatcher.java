@@ -1,12 +1,17 @@
+package io.github.huanhuan5695.easyrule;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 public final class TemplateMatcher {
     private static final int DEFAULT_MAX_STATES = 10_000;
@@ -20,6 +25,7 @@ public final class TemplateMatcher {
     private final Node root;
     private final List<SequenceTemplate> sequenceTemplates;
     private final Map<String, DoubleArrayTrie> slotDictionaries;
+    private final SlotScanIndex slotScanIndex;
     private final int maxStates;
     private final int maxResults;
 
@@ -27,11 +33,13 @@ public final class TemplateMatcher {
             Node root,
             List<SequenceTemplate> sequenceTemplates,
             Map<String, DoubleArrayTrie> slotDictionaries,
+            SlotScanIndex slotScanIndex,
             int maxStates,
             int maxResults) {
         this.root = root;
         this.sequenceTemplates = sequenceTemplates;
         this.slotDictionaries = slotDictionaries;
+        this.slotScanIndex = slotScanIndex;
         this.maxStates = maxStates;
         this.maxResults = maxResults;
     }
@@ -41,18 +49,39 @@ public final class TemplateMatcher {
     }
 
     public List<MatchResult> match(String input) {
+        return match(input, MatchOptions.defaultOptions());
+    }
+
+    public List<MatchResult> match(String input, MatchOptions options) {
         if (input == null) {
             return Collections.emptyList();
         }
+        MatchOptions effectiveOptions = options == null ? MatchOptions.defaultOptions() : options;
+        int effectiveMaxResults = effectiveOptions.maxResults() == null
+                ? maxResults
+                : Math.min(maxResults, effectiveOptions.maxResults());
 
-        List<MatchResult> exactResults = matchExactTemplates(input);
+        if (effectiveOptions.mode() == MatchMode.EXACT_ONLY) {
+            return matchExactTemplates(input, effectiveMaxResults);
+        }
+        if (effectiveOptions.mode() == MatchMode.SLOT_SEQUENCE_ONLY) {
+            return matchSlotSequences(input, effectiveMaxResults);
+        }
+        if (effectiveOptions.mode() == MatchMode.ALL) {
+            List<MatchResult> results = new ArrayList<>();
+            results.addAll(matchExactTemplates(input, maxResults));
+            results.addAll(matchSlotSequences(input, maxResults));
+            return sortAndLimit(results, effectiveMaxResults);
+        }
+
+        List<MatchResult> exactResults = matchExactTemplates(input, effectiveMaxResults);
         if (!exactResults.isEmpty()) {
             return exactResults;
         }
-        return matchSlotSequences(input);
+        return matchSlotSequences(input, effectiveMaxResults);
     }
 
-    private List<MatchResult> matchExactTemplates(String input) {
+    private List<MatchResult> matchExactTemplates(String input, int resultLimit) {
         List<MatchResult> results = new ArrayList<>();
         ArrayDeque<MatchState> queue = new ArrayDeque<>();
         queue.add(new MatchState(root, 0, new LinkedHashMap<String, List<SlotCapture>>()));
@@ -104,10 +133,10 @@ public final class TemplateMatcher {
             }
         }
 
-        return sortAndLimit(results, maxResults);
+        return sortAndLimit(results, resultLimit);
     }
 
-    private List<MatchResult> matchSlotSequences(String input) {
+    private List<MatchResult> matchSlotSequences(String input, int resultLimit) {
         List<MatchResult> results = new ArrayList<>();
         int visitedStates = 0;
         Map<String, List<SlotHit>> hitsBySlot = collectSlotHits(input);
@@ -149,12 +178,15 @@ public final class TemplateMatcher {
             }
         }
 
-        return sortAndLimit(results, maxResults);
+        return sortAndLimit(results, resultLimit);
     }
 
     private Map<String, List<SlotHit>> collectSlotHits(String input) {
-        Map<String, List<SlotHit>> hitsBySlot = new HashMap<>();
+        Map<String, List<SlotHit>> hitsBySlot = slotScanIndex.scan(input);
         for (String slotName : requiredSequenceSlotNames()) {
+            if (slotScanIndex.indexesSlot(slotName)) {
+                continue;
+            }
             DoubleArrayTrie dictionary = slotDictionaries.get(slotName);
             if (dictionary == null) {
                 continue;
@@ -215,13 +247,20 @@ public final class TemplateMatcher {
     public static final class Builder {
         private final Node root = new Node();
         private final List<SequenceTemplate> sequenceTemplates = new ArrayList<>();
+        private final Set<String> referencedSlotNames = new TreeSet<>();
         private final Map<String, DoubleArrayTrie> slotDictionaries = new HashMap<>();
+        private final Map<String, List<String>> slotValues = new HashMap<>();
         private int maxStates = DEFAULT_MAX_STATES;
         private int maxResults = DEFAULT_MAX_RESULTS;
+        private boolean strictSlotValidation;
 
         public Builder addSlotDictionary(String slotName, Collection<String> values) {
             validateSlotName(slotName);
+            if (values == null) {
+                throw new IllegalArgumentException("values is required");
+            }
             slotDictionaries.put(slotName, DoubleArrayTrie.build(values));
+            slotValues.put(slotName, copyDictionaryValues(values));
             return this;
         }
 
@@ -231,6 +270,7 @@ public final class TemplateMatcher {
                 throw new IllegalArgumentException("trie is required");
             }
             slotDictionaries.put(slotName, trie);
+            slotValues.remove(slotName);
             return this;
         }
 
@@ -243,6 +283,7 @@ public final class TemplateMatcher {
                 throw new IllegalArgumentException("pattern is required");
             }
             List<Token> tokens = parsePattern(pattern.pattern());
+            registerReferencedSlots(tokens);
             if (pattern.mode() == PatternMode.SLOT_SEQUENCE) {
                 if (!isSlotSequencePattern(tokens)) {
                     throw new IllegalArgumentException(
@@ -266,6 +307,15 @@ public final class TemplateMatcher {
                 }
             }
             node.outputs.add(new TemplateMeta(pattern.category(), pattern.templateId(), pattern.priority()));
+            return this;
+        }
+
+        public Builder strictSlotValidation() {
+            return strictSlotValidation(true);
+        }
+
+        public Builder strictSlotValidation(boolean enabled) {
+            this.strictSlotValidation = enabled;
             return this;
         }
 
@@ -294,12 +344,28 @@ public final class TemplateMatcher {
         }
 
         public TemplateMatcher build() {
+            if (strictSlotValidation) {
+                validateReferencedSlotDictionaries();
+            }
             return new TemplateMatcher(
                     copyNode(root),
                     new ArrayList<>(sequenceTemplates),
                     new HashMap<>(slotDictionaries),
+                    SlotScanIndex.build(requiredSequenceSlotNames(sequenceTemplates), slotValues),
                     maxStates,
                     maxResults);
+        }
+
+        private void validateReferencedSlotDictionaries() {
+            List<String> missing = new ArrayList<>();
+            for (String slotName : referencedSlotNames) {
+                if (!slotDictionaries.containsKey(slotName)) {
+                    missing.add(slotName);
+                }
+            }
+            if (!missing.isEmpty()) {
+                throw new IllegalStateException("missing slot dictionaries: " + String.join(", ", missing));
+            }
         }
 
         private static List<Token> parsePattern(String pattern) {
@@ -343,6 +409,36 @@ public final class TemplateMatcher {
                 }
             }
             return slotNames;
+        }
+
+        private static List<String> requiredSequenceSlotNames(List<SequenceTemplate> templates) {
+            List<String> slotNames = new ArrayList<>();
+            for (SequenceTemplate template : templates) {
+                for (String slotName : template.slotNames) {
+                    if (!slotNames.contains(slotName)) {
+                        slotNames.add(slotName);
+                    }
+                }
+            }
+            return slotNames;
+        }
+
+        private static List<String> copyDictionaryValues(Collection<String> values) {
+            List<String> copy = new ArrayList<>();
+            for (String value : values) {
+                if (value != null && !value.isEmpty()) {
+                    copy.add(value);
+                }
+            }
+            return copy;
+        }
+
+        private void registerReferencedSlots(List<Token> tokens) {
+            for (Token token : tokens) {
+                if (token.slotName != null) {
+                    referencedSlotNames.add(token.slotName);
+                }
+            }
         }
 
         private static SlotEdge findOrCreateSlotEdge(Node node, String slotName) {
@@ -532,6 +628,110 @@ public final class TemplateMatcher {
             this.value = value;
             this.start = start;
             this.end = end;
+        }
+    }
+
+    private static final class SlotScanIndex {
+        private final ScanNode root;
+        private final Set<String> indexedSlotNames;
+
+        private SlotScanIndex(ScanNode root, Set<String> indexedSlotNames) {
+            this.root = root;
+            this.indexedSlotNames = indexedSlotNames;
+        }
+
+        private static SlotScanIndex build(
+                List<String> requiredSlotNames,
+                Map<String, List<String>> slotValues) {
+            ScanNode root = new ScanNode();
+            Set<String> indexedSlotNames = new HashSet<>();
+            for (String slotName : requiredSlotNames) {
+                List<String> values = slotValues.get(slotName);
+                if (values == null || values.isEmpty()) {
+                    continue;
+                }
+                indexedSlotNames.add(slotName);
+                for (String value : values) {
+                    addValue(root, slotName, value);
+                }
+            }
+            buildFailureLinks(root);
+            return new SlotScanIndex(root, indexedSlotNames);
+        }
+
+        private boolean indexesSlot(String slotName) {
+            return indexedSlotNames.contains(slotName);
+        }
+
+        private Map<String, List<SlotHit>> scan(String input) {
+            Map<String, List<SlotHit>> hitsBySlot = new HashMap<>();
+            ScanNode node = root;
+            for (int i = 0; i < input.length(); i++) {
+                char current = input.charAt(i);
+                while (node != root && !node.children.containsKey(current)) {
+                    node = node.failure;
+                }
+                ScanNode next = node.children.get(current);
+                if (next != null) {
+                    node = next;
+                }
+                for (SlotOutput output : node.outputs) {
+                    int start = i + 1 - output.value.length();
+                    hitsBySlot.computeIfAbsent(output.slotName, ignored -> new ArrayList<>())
+                            .add(new SlotHit(output.value, start, i + 1));
+                }
+            }
+            return hitsBySlot;
+        }
+
+        private static void addValue(ScanNode root, String slotName, String value) {
+            ScanNode node = root;
+            for (int i = 0; i < value.length(); i++) {
+                char current = value.charAt(i);
+                node = node.children.computeIfAbsent(current, ignored -> new ScanNode());
+            }
+            node.outputs.add(new SlotOutput(slotName, value));
+        }
+
+        private static void buildFailureLinks(ScanNode root) {
+            ArrayDeque<ScanNode> queue = new ArrayDeque<>();
+            root.failure = root;
+            for (ScanNode child : root.children.values()) {
+                child.failure = root;
+                queue.addLast(child);
+            }
+
+            while (!queue.isEmpty()) {
+                ScanNode node = queue.removeFirst();
+                for (Map.Entry<Character, ScanNode> entry : node.children.entrySet()) {
+                    char transition = entry.getKey();
+                    ScanNode child = entry.getValue();
+                    ScanNode failure = node.failure;
+                    while (failure != root && !failure.children.containsKey(transition)) {
+                        failure = failure.failure;
+                    }
+                    ScanNode fallback = failure.children.get(transition);
+                    child.failure = fallback == null ? root : fallback;
+                    child.outputs.addAll(child.failure.outputs);
+                    queue.addLast(child);
+                }
+            }
+        }
+    }
+
+    private static final class ScanNode {
+        private final Map<Character, ScanNode> children = new HashMap<>();
+        private final List<SlotOutput> outputs = new ArrayList<>();
+        private ScanNode failure;
+    }
+
+    private static final class SlotOutput {
+        private final String slotName;
+        private final String value;
+
+        private SlotOutput(String slotName, String value) {
+            this.slotName = slotName;
+            this.value = value;
         }
     }
 

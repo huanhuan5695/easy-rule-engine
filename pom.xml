@@ -8,6 +8,35 @@
     <version>0.1.0-SNAPSHOT</version>
     <name>easy-rule-engine</name>
     <description>Lightweight Java template and slot based rule matcher.</description>
+    <url>https://github.com/huanhuan5695/easy-rule-engine</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>huanhuan5695</id>
+            <name>huanhuan5695</name>
+            <url>https://github.com/huanhuan5695</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/huanhuan5695/easy-rule-engine.git</connection>
+        <developerConnection>scm:git:https://github.com/huanhuan5695/easy-rule-engine.git</developerConnection>
+        <url>https://github.com/huanhuan5695/easy-rule-engine</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/huanhuan5695/easy-rule-engine/issues</url>
+    </issueManagement>
 
     <properties>
         <maven.compiler.release>11</maven.compiler.release>

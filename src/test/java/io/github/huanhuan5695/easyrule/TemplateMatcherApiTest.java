@@ -1,3 +1,5 @@
+package io.github.huanhuan5695.easyrule;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -80,5 +82,83 @@ class TemplateMatcherApiTest {
         assertEquals(2, results.size());
         assertEquals("high", results.get(0).templateId());
         assertEquals("low", results.get(1).templateId());
+    }
+
+    @Test
+    void strictSlotValidationFailsFastForMissingDictionaries() {
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> TemplateMatcher.builder()
+                        .strictSlotValidation()
+                        .addPattern(RulePattern.exact("profile", "missing", "我是[people]"))
+                        .build());
+
+        assertEquals("missing slot dictionaries: people", exception.getMessage());
+    }
+
+    @Test
+    void strictSlotValidationAllowsCompleteDictionaries() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictSlotValidation()
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addPattern(RulePattern.slotSequence("music", "like-sing", "[like]_[sing]"))
+                .build();
+
+        assertEquals(1, matcher.match("我喜欢唱歌").size());
+    }
+
+    @Test
+    void matchOptionsCanForceSlotSequenceMode() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addPattern(RulePattern.exact("exact", "exact-like-sing", "我[like][sing]"))
+                .addPattern(RulePattern.slotSequence("sequence", "sequence-like-sing", "[like]_[sing]"))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match(
+                "我喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build());
+
+        assertEquals(1, results.size());
+        assertEquals(PatternMode.SLOT_SEQUENCE, results.get(0).mode());
+        assertEquals("sequence-like-sing", results.get(0).templateId());
+    }
+
+    @Test
+    void matchOptionsCanLimitResultsPerCall() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "first", "我是[people]", 10))
+                .addPattern(RulePattern.exact("profile", "second", "我是[people]", 5))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match(
+                "我是中国人",
+                MatchOptions.builder().maxResults(1).build());
+
+        assertEquals(1, results.size());
+        assertEquals("first", results.get(0).templateId());
+    }
+
+    @Test
+    void slotSequenceFindsOverlappingValuesAcrossSlots() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("like", Arrays.asList("喜", "喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("欢唱", "唱歌"))
+                .addPattern(RulePattern.slotSequence("music", "overlap", "[like]_[sing]"))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match(
+                "我喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build());
+
+        assertEquals(3, results.size());
+        assertEquals("喜欢", results.get(0).captures().get("like").get(0));
+        assertEquals("唱歌", results.get(0).captures().get("sing").get(0));
+        assertEquals("喜", results.get(1).captures().get("like").get(0));
+        assertEquals("欢唱", results.get(1).captures().get("sing").get(0));
+        assertEquals("喜", results.get(2).captures().get("like").get(0));
+        assertEquals("唱歌", results.get(2).captures().get("sing").get(0));
     }
 }

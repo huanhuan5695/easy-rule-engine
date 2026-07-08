@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and usage help
+    url: https://github.com/huanhuan5695/easy-rule-engine/discussions
+    about: Ask questions or share usage patterns in Discussions.

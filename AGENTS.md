@@ -4,8 +4,14 @@
 
 This repository is a lightweight Java rule matcher. Keep code organized by responsibility and avoid implementation files at the root. Current layout:
 
-- `src/main/java/` for matcher and trie source code.
-- `src/test/java/` for JUnit and smoke tests.
+- `src/main/java/io/github/huanhuan5695/easyrule/` for packaged matcher and trie source code.
+- `src/test/java/io/github/huanhuan5695/easyrule/` for same-package JUnit and smoke tests.
+- `src/test/java/TemplateMatcherPackageSmokeTest.java` for external-consumer import validation.
+- `src/benchmark/java/io/github/huanhuan5695/easyrule/` for no-dependency local benchmarks.
+- `examples/` for runnable public API examples.
+- `docs/` for performance notes and project documentation.
+- `.github/` for CI, issue templates, and pull request templates.
+- `Makefile` for no-Maven smoke test and benchmark shortcuts.
 - `README.md` for user-facing usage and design notes.
 - `pom.xml` for Maven build configuration.
 
@@ -21,10 +27,14 @@ Use Maven when available:
 Without Maven, compile and run the smoke tests directly:
 
 ```bash
-javac -d /tmp/dat-test src/main/java/DoubleArrayTrie.java src/main/java/PatternMode.java src/main/java/RulePattern.java src/main/java/TemplateMatcher.java src/test/java/DoubleArrayTrieTest.java src/test/java/TemplateMatcherTest.java src/test/java/TemplateMatcherApiSmokeTest.java
-java -cp /tmp/dat-test DoubleArrayTrieTest
-java -cp /tmp/dat-test TemplateMatcherTest
-java -cp /tmp/dat-test TemplateMatcherApiSmokeTest
+make example
+make smoke
+```
+
+Run the local benchmark with:
+
+```bash
+make benchmark
 ```
 
 ## Coding Style & Naming Conventions
