@@ -514,6 +514,7 @@ slotCaptures()
 - 当严格模板匹配成功时，不会继续执行槽位序列匹配。
 - `MatchOptions.maxStates()` 可以为单次调用设置更小的状态访问上限；实际上限取构建期上限和单次调用上限的较小值，并在本次 `match()` 的所有匹配阶段共享。
 - 生产环境建议启用 `strictSlotValidation()`，在构建期发现缺失的槽位字典。
+- 重复注册同一个 `RulePattern` 会按值语义去重，避免配置文件重复项造成重复匹配结果。
 - `build()` 会生成当前 Builder 状态的快照；后续继续给 Builder 添加模板不会影响已经构建好的 matcher。
 - `match()` 返回的结果列表、槽位 map 和槽位列表都是不可变集合，调用方可以安全共享结果对象。
 - `DoubleArrayTrie.commonPrefixSearch()` 返回不可变列表；`DoubleArrayTrie.build()` 要求传入非空集合对象，但会忽略集合中的 `null` 和空字符串。

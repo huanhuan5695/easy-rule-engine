@@ -278,6 +278,7 @@ public final class TemplateMatcher {
     public static final class Builder {
         private final Node root = new Node();
         private final List<SequenceTemplate> sequenceTemplates = new ArrayList<>();
+        private final Set<RulePattern> patterns = new HashSet<>();
         private final Set<String> referencedSlotNames = new TreeSet<>();
         private final Map<String, DoubleArrayTrie> slotDictionaries = new HashMap<>();
         private final Map<String, List<String>> slotValues = new HashMap<>();
@@ -366,6 +367,9 @@ public final class TemplateMatcher {
         public Builder addPattern(RulePattern pattern) {
             if (pattern == null) {
                 throw new IllegalArgumentException("pattern is required");
+            }
+            if (!patterns.add(pattern)) {
+                return this;
             }
             List<Token> tokens = parsePattern(pattern.pattern());
             registerReferencedSlots(tokens);

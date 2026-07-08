@@ -145,6 +145,26 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void duplicateRulePatternsDoNotDuplicateResults() {
+        RulePattern exact = RulePattern.exact("profile", "nationality", "我是[people]");
+        RulePattern sequence = RulePattern.slotSequence("music", "like-sing", "[like]_[sing]");
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addPattern(exact)
+                .addPattern(exact)
+                .addPattern(sequence)
+                .addPattern(sequence)
+                .build();
+
+        assertEquals(1, matcher.match("我是中国人").size());
+        assertEquals(1, matcher.match(
+                "他喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).size());
+    }
+
+    @Test
     void matchOptionsCanForceSlotSequenceMode() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("like", Arrays.asList("喜欢"))
