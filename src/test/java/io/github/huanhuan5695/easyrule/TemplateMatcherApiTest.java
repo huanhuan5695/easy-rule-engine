@@ -119,6 +119,30 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void strictTemplateIdValidationFailsForDuplicateIdsInSameCategory() {
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> TemplateMatcher.builder()
+                        .strictTemplateIdValidation()
+                        .addPattern(RulePattern.exact("profile", "same-id", "我是[people]"))
+                        .addPattern(RulePattern.exact("profile", "same-id", "他是[people]"))
+                        .build());
+
+        assertEquals("duplicate template ids: profile/same-id", exception.getMessage());
+    }
+
+    @Test
+    void strictTemplateIdValidationAllowsSameIdInDifferentCategories() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictTemplateIdValidation()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "same-id", "我是[people]"))
+                .addPattern(RulePattern.exact("account", "same-id", "我是[people]"))
+                .build();
+
+        assertEquals(2, matcher.match("我是中国人").size());
+    }
+
+    @Test
     void builderCanRegisterDictionariesAndPatternsInBatches() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .strictSlotValidation()

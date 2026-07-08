@@ -14,6 +14,8 @@ public class TemplateMatcherApiSmokeTest {
         higherPriorityResultsAreReturnedFirst();
         strictSlotValidationFailsFastForMissingDictionaries();
         strictSlotValidationAllowsCompleteDictionaries();
+        strictTemplateIdValidationFailsForDuplicateIdsInSameCategory();
+        strictTemplateIdValidationAllowsSameIdInDifferentCategories();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderBatchRegistrationRejectsNullInputs();
         duplicateRulePatternsDoNotDuplicateResults();
@@ -142,6 +144,31 @@ public class TemplateMatcherApiSmokeTest {
                 .build();
 
         assertEquals(1, matcher.match("我喜欢唱歌").size(), "complete dictionaries build and match");
+    }
+
+    private static void strictTemplateIdValidationFailsForDuplicateIdsInSameCategory() {
+        try {
+            TemplateMatcher.builder()
+                    .strictTemplateIdValidation()
+                    .addPattern(RulePattern.exact("profile", "same-id", "我是[people]"))
+                    .addPattern(RulePattern.exact("profile", "same-id", "他是[people]"))
+                    .build();
+        } catch (IllegalStateException expected) {
+            assertEquals("duplicate template ids: profile/same-id", expected.getMessage(), "duplicate id message");
+            return;
+        }
+        throw new AssertionError("strict template id validation should reject duplicate ids");
+    }
+
+    private static void strictTemplateIdValidationAllowsSameIdInDifferentCategories() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictTemplateIdValidation()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "same-id", "我是[people]"))
+                .addPattern(RulePattern.exact("account", "same-id", "我是[people]"))
+                .build();
+
+        assertEquals(2, matcher.match("我是中国人").size(), "same id can be reused across categories");
     }
 
     private static void builderCanRegisterDictionariesAndPatternsInBatches() {

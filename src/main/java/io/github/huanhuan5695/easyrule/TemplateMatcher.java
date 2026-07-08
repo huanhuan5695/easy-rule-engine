@@ -285,6 +285,7 @@ public final class TemplateMatcher {
         private int maxStates = DEFAULT_MAX_STATES;
         private int maxResults = DEFAULT_MAX_RESULTS;
         private boolean strictSlotValidation;
+        private boolean strictTemplateIdValidation;
 
         private Builder() {
         }
@@ -435,6 +436,26 @@ public final class TemplateMatcher {
             return this;
         }
 
+        /**
+         * Enables build-time validation that template ids are unique within a category.
+         *
+         * @return this builder
+         */
+        public Builder strictTemplateIdValidation() {
+            return strictTemplateIdValidation(true);
+        }
+
+        /**
+         * Enables or disables build-time validation of template id uniqueness.
+         *
+         * @param enabled whether strict validation is enabled
+         * @return this builder
+         */
+        public Builder strictTemplateIdValidation(boolean enabled) {
+            this.strictTemplateIdValidation = enabled;
+            return this;
+        }
+
         private static PatternMode inferMode(String pattern) {
             List<Token> tokens = parsePattern(pattern);
             if (isSlotSequencePattern(tokens)) {
@@ -480,6 +501,9 @@ public final class TemplateMatcher {
             if (strictSlotValidation) {
                 validateReferencedSlotDictionaries();
             }
+            if (strictTemplateIdValidation) {
+                validateUniqueTemplateIds();
+            }
             return new TemplateMatcher(
                     copyNode(root),
                     new ArrayList<>(sequenceTemplates),
@@ -498,6 +522,20 @@ public final class TemplateMatcher {
             }
             if (!missing.isEmpty()) {
                 throw new IllegalStateException("missing slot dictionaries: " + String.join(", ", missing));
+            }
+        }
+
+        private void validateUniqueTemplateIds() {
+            Set<String> seen = new HashSet<>();
+            Set<String> duplicates = new TreeSet<>();
+            for (RulePattern pattern : patterns) {
+                String key = pattern.category() + "/" + pattern.templateId();
+                if (!seen.add(key)) {
+                    duplicates.add(key);
+                }
+            }
+            if (!duplicates.isEmpty()) {
+                throw new IllegalStateException("duplicate template ids: " + String.join(", ", duplicates));
             }
         }
 

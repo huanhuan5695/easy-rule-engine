@@ -447,6 +447,7 @@ import java.util.Arrays;
 
 TemplateMatcher matcher = TemplateMatcher.builder()
         .strictSlotValidation()
+        .strictTemplateIdValidation()
         .addSlotDictionary("people", Arrays.asList("中国人"))
         .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
         .build();
@@ -456,6 +457,12 @@ TemplateMatcher matcher = TemplateMatcher.builder()
 
 ```text
 missing slot dictionaries: people
+```
+
+如果同一个 `category` 下重复使用同一个 `templateId`，开启 `strictTemplateIdValidation()` 后会抛出：
+
+```text
+duplicate template ids: profile/nationality
 ```
 
 ### 匹配输入
