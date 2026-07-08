@@ -142,6 +142,18 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void matchResultsListIsImmutable() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match("我是中国人");
+
+        assertThrows(UnsupportedOperationException.class, results::clear);
+    }
+
+    @Test
     void slotSequenceFindsOverlappingValuesAcrossSlots() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("like", Arrays.asList("喜", "喜欢"))

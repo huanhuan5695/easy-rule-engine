@@ -13,6 +13,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+/**
+ * Immutable template matcher for exact templates and slot-sequence templates.
+ *
+ * <p>Build a matcher with {@link #builder()}, add slot dictionaries and
+ * {@link RulePattern} instances, then call {@link #match(String)}. Built
+ * matchers are snapshots of the builder state and are safe to share across
+ * threads after construction.
+ */
 public final class TemplateMatcher {
     private static final int DEFAULT_MAX_STATES = 10_000;
     private static final int DEFAULT_MAX_RESULTS = 100;
@@ -44,14 +52,35 @@ public final class TemplateMatcher {
         this.maxResults = maxResults;
     }
 
+    /**
+     * Creates a new matcher builder.
+     *
+     * @return builder
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Matches input with default options.
+     *
+     * <p>The default strategy is {@link MatchMode#EXACT_THEN_SLOT_SEQUENCE}.
+     * Returned result lists and nested capture collections are immutable.
+     *
+     * @param input input text; {@code null} returns an empty result list
+     * @return immutable match results
+     */
     public List<MatchResult> match(String input) {
         return match(input, MatchOptions.defaultOptions());
     }
 
+    /**
+     * Matches input with per-call options.
+     *
+     * @param input input text; {@code null} returns an empty result list
+     * @param options per-call options; {@code null} uses default options
+     * @return immutable match results
+     */
     public List<MatchResult> match(String input, MatchOptions options) {
         if (input == null) {
             return Collections.emptyList();
@@ -223,10 +252,10 @@ public final class TemplateMatcher {
 
     private static List<MatchResult> sortAndLimit(List<MatchResult> results, int maxResults) {
         results.sort(RESULT_ORDER);
-        if (results.size() <= maxResults) {
-            return results;
+        if (results.size() > maxResults) {
+            return Collections.unmodifiableList(new ArrayList<>(results.subList(0, maxResults)));
         }
-        return new ArrayList<>(results.subList(0, maxResults));
+        return Collections.unmodifiableList(new ArrayList<>(results));
     }
 
     private static Map<String, List<SlotCapture>> appendCapture(
@@ -244,6 +273,9 @@ public final class TemplateMatcher {
         return copy;
     }
 
+    /**
+     * Mutable builder used to create immutable {@link TemplateMatcher} snapshots.
+     */
     public static final class Builder {
         private final Node root = new Node();
         private final List<SequenceTemplate> sequenceTemplates = new ArrayList<>();
@@ -254,6 +286,19 @@ public final class TemplateMatcher {
         private int maxResults = DEFAULT_MAX_RESULTS;
         private boolean strictSlotValidation;
 
+        private Builder() {
+        }
+
+        /**
+         * Adds or replaces a slot dictionary from raw values.
+         *
+         * <p>Values are indexed for exact-template matching and for the shared
+         * slot-sequence scan index.
+         *
+         * @param slotName slot name used in patterns without brackets
+         * @param values dictionary values; null and empty entries are ignored
+         * @return this builder
+         */
         public Builder addSlotDictionary(String slotName, Collection<String> values) {
             validateSlotName(slotName);
             if (values == null) {
@@ -264,6 +309,17 @@ public final class TemplateMatcher {
             return this;
         }
 
+        /**
+         * Adds or replaces a slot dictionary from an existing trie.
+         *
+         * <p>Tries supplied this way are used for exact matching and fallback
+         * slot-sequence scanning, but their raw values are not available to the
+         * shared scan index.
+         *
+         * @param slotName slot name used in patterns without brackets
+         * @param trie immutable dictionary trie
+         * @return this builder
+         */
         public Builder addSlotDictionary(String slotName, DoubleArrayTrie trie) {
             validateSlotName(slotName);
             if (trie == null) {
@@ -274,10 +330,24 @@ public final class TemplateMatcher {
             return this;
         }
 
+        /**
+         * Adds a template and infers its mode from the pattern shape.
+         *
+         * @param category result category
+         * @param templateId result template id
+         * @param pattern pattern text
+         * @return this builder
+         */
         public Builder addTemplate(String category, String templateId, String pattern) {
             return addPattern(RulePattern.of(category, templateId, pattern, inferMode(pattern)));
         }
 
+        /**
+         * Adds a rule pattern with explicit mode and priority.
+         *
+         * @param pattern rule pattern
+         * @return this builder
+         */
         public Builder addPattern(RulePattern pattern) {
             if (pattern == null) {
                 throw new IllegalArgumentException("pattern is required");
@@ -310,10 +380,21 @@ public final class TemplateMatcher {
             return this;
         }
 
+        /**
+         * Enables build-time validation that every referenced slot has a dictionary.
+         *
+         * @return this builder
+         */
         public Builder strictSlotValidation() {
             return strictSlotValidation(true);
         }
 
+        /**
+         * Enables or disables build-time validation of referenced slot dictionaries.
+         *
+         * @param enabled whether strict validation is enabled
+         * @return this builder
+         */
         public Builder strictSlotValidation(boolean enabled) {
             this.strictSlotValidation = enabled;
             return this;
@@ -327,6 +408,12 @@ public final class TemplateMatcher {
             return PatternMode.EXACT;
         }
 
+        /**
+         * Sets the maximum number of internal states visited per match call.
+         *
+         * @param maxStates positive state limit
+         * @return this builder
+         */
         public Builder maxStates(int maxStates) {
             if (maxStates <= 0) {
                 throw new IllegalArgumentException("maxStates must be positive");
@@ -335,6 +422,12 @@ public final class TemplateMatcher {
             return this;
         }
 
+        /**
+         * Sets the matcher-level maximum number of returned results.
+         *
+         * @param maxResults positive result limit
+         * @return this builder
+         */
         public Builder maxResults(int maxResults) {
             if (maxResults <= 0) {
                 throw new IllegalArgumentException("maxResults must be positive");
@@ -343,6 +436,11 @@ public final class TemplateMatcher {
             return this;
         }
 
+        /**
+         * Builds an immutable matcher snapshot.
+         *
+         * @return immutable matcher
+         */
         public TemplateMatcher build() {
             if (strictSlotValidation) {
                 validateReferencedSlotDictionaries();
@@ -479,6 +577,9 @@ public final class TemplateMatcher {
         }
     }
 
+    /**
+     * Immutable match result containing routing metadata and captured slots.
+     */
     public static final class MatchResult {
         private final String category;
         private final String templateId;
@@ -501,26 +602,56 @@ public final class TemplateMatcher {
             this.captures = freezeValues(this.slotCaptures);
         }
 
+        /**
+         * Returns the matched rule category.
+         *
+         * @return category
+         */
         public String category() {
             return category;
         }
 
+        /**
+         * Returns the matched rule template id.
+         *
+         * @return template id
+         */
         public String templateId() {
             return templateId;
         }
 
+        /**
+         * Returns the mode of the pattern that matched.
+         *
+         * @return pattern mode
+         */
         public PatternMode mode() {
             return mode;
         }
 
+        /**
+         * Returns the matched rule priority.
+         *
+         * @return priority
+         */
         public int priority() {
             return priority;
         }
 
+        /**
+         * Returns captured slot values without positions.
+         *
+         * @return immutable map from slot name to immutable captured values
+         */
         public Map<String, List<String>> captures() {
             return captures;
         }
 
+        /**
+         * Returns captured slot values with source positions.
+         *
+         * @return immutable map from slot name to immutable captures
+         */
         public Map<String, List<SlotCapture>> slotCaptures() {
             return slotCaptures;
         }
@@ -557,6 +688,12 @@ public final class TemplateMatcher {
         }
     }
 
+    /**
+     * Immutable captured slot value and its source span.
+     *
+     * <p>{@code start} is inclusive and {@code end} is exclusive, matching
+     * {@link String#substring(int, int)} semantics.
+     */
     public static final class SlotCapture {
         private final String slotName;
         private final String value;
@@ -570,18 +707,38 @@ public final class TemplateMatcher {
             this.end = end;
         }
 
+        /**
+         * Returns the slot name.
+         *
+         * @return slot name
+         */
         public String slotName() {
             return slotName;
         }
 
+        /**
+         * Returns the captured value.
+         *
+         * @return captured value
+         */
         public String value() {
             return value;
         }
 
+        /**
+         * Returns the inclusive start offset in the input string.
+         *
+         * @return start offset
+         */
         public int start() {
             return start;
         }
 
+        /**
+         * Returns the exclusive end offset in the input string.
+         *
+         * @return end offset
+         */
         public int end() {
             return end;
         }

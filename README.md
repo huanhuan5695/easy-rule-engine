@@ -78,6 +78,7 @@ make example
 
 ```bash
 mvn test
+mvn package
 ```
 
 如果本机没有 Maven，可以在项目根目录执行：
@@ -98,8 +99,12 @@ All TemplateMatcherPackage smoke tests passed.
 远程仓库包含 GitHub Actions CI，push 或 pull request 时会使用 Java 11 执行：
 
 ```bash
-mvn test
+mvn -B test
+mvn -B -DskipTests package
+make smoke
 ```
+
+`mvn package` 会生成普通 jar、sources jar 和 javadocs jar，便于后续发布到 Maven Central。
 
 ## 性能测试
 
@@ -488,6 +493,7 @@ slotCaptures()
 - 当严格模板匹配成功时，不会继续执行槽位序列匹配。
 - 生产环境建议启用 `strictSlotValidation()`，在构建期发现缺失的槽位字典。
 - `build()` 会生成当前 Builder 状态的快照；后续继续给 Builder 添加模板不会影响已经构建好的 matcher。
+- `match()` 返回的结果列表、槽位 map 和槽位列表都是不可变集合，调用方可以安全共享结果对象。
 - 槽位序列匹配会基于共享扫描索引收集命中项，避免多个 sequence 模板重复扫描同一段文本。直接传入 `DoubleArrayTrie` 的槽位会自动回退到逐槽扫描。
 
 ## 示例测试

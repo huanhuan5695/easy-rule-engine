@@ -8,6 +8,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+/**
+ * Immutable double-array trie for exact word lookup and common-prefix search.
+ *
+ * <p>The trie is built from a static word collection. Null and empty words are
+ * ignored during construction. Instances are safe to share across threads after
+ * construction because they expose no mutating operations.
+ */
 public final class DoubleArrayTrie {
     private static final int ROOT = 1;
     private static final int TERMINAL = 0;
@@ -24,6 +31,12 @@ public final class DoubleArrayTrie {
         this.codes = codes;
     }
 
+    /**
+     * Builds a trie from the supplied words.
+     *
+     * @param words words to index; null and empty entries are ignored
+     * @return immutable trie
+     */
     public static DoubleArrayTrie build(Collection<String> words) {
         BuildNode root = new BuildNode();
         Map<Character, Integer> codes = buildCharacterCodes(words);
@@ -46,6 +59,12 @@ public final class DoubleArrayTrie {
         return builder.toTrie();
     }
 
+    /**
+     * Returns whether the trie contains the exact word.
+     *
+     * @param word candidate word
+     * @return {@code true} if the exact word exists
+     */
     public boolean contains(String word) {
         int node = traverse(word);
         if (node < 0) {
@@ -55,14 +74,33 @@ public final class DoubleArrayTrie {
         return terminal < check.length && check[terminal] == node && values[terminal] != null;
     }
 
+    /**
+     * Returns whether the trie contains the prefix path.
+     *
+     * @param prefix candidate prefix
+     * @return {@code true} if the prefix path exists
+     */
     public boolean startsWith(String prefix) {
         return traverse(prefix) >= 0;
     }
 
+    /**
+     * Finds dictionary words that are prefixes of {@code text}.
+     *
+     * @param text text to scan from offset {@code 0}
+     * @return matching dictionary words in increasing end-position order
+     */
     public List<String> commonPrefixSearch(String text) {
         return commonPrefixSearch(text, 0);
     }
 
+    /**
+     * Finds dictionary words that are prefixes of {@code text.substring(offset)}.
+     *
+     * @param text text to scan
+     * @param offset zero-based scan offset
+     * @return matching dictionary words in increasing end-position order
+     */
     public List<String> commonPrefixSearch(String text, int offset) {
         if (text == null) {
             return Collections.emptyList();

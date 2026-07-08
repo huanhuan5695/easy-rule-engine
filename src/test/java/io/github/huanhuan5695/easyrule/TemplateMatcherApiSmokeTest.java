@@ -14,6 +14,7 @@ public class TemplateMatcherApiSmokeTest {
         strictSlotValidationAllowsCompleteDictionaries();
         matchOptionsCanForceSlotSequenceMode();
         matchOptionsCanLimitResultsPerCall();
+        matchResultsListIsImmutable();
         slotSequenceFindsOverlappingValuesAcrossSlots();
 
         System.out.println("All TemplateMatcherApi smoke tests passed.");
@@ -146,6 +147,22 @@ public class TemplateMatcherApiSmokeTest {
 
         assertEquals(1, results.size(), "one limited result");
         assertEquals("first", results.get(0).templateId(), "highest priority survives per-call limit");
+    }
+
+    private static void matchResultsListIsImmutable() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match("我是中国人");
+
+        try {
+            results.clear();
+        } catch (UnsupportedOperationException expected) {
+            return;
+        }
+        throw new AssertionError("match results list should be immutable");
     }
 
     private static void slotSequenceFindsOverlappingValuesAcrossSlots() {

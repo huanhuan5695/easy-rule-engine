@@ -17,16 +17,18 @@ Use semantic versioning:
 
    ```bash
    mvn test
+   mvn package
    make example
    make smoke
    make benchmark
    ```
 
 3. Record benchmark results in the release notes when matching internals changed.
-4. Confirm README examples compile against the packaged API.
-5. Confirm `LICENSE`, `CONTRIBUTING.md`, and `pom.xml` metadata are current.
-6. Commit the version change with `Release <version>`.
-7. Tag the release:
+4. Confirm the package step creates the main jar, sources jar, and javadocs jar.
+5. Confirm README examples compile against the packaged API.
+6. Confirm `LICENSE`, `CONTRIBUTING.md`, and `pom.xml` metadata are current.
+7. Commit the version change with `Release <version>`.
+8. Tag the release:
 
    ```bash
    git tag v<version>
@@ -49,6 +51,7 @@ Use this structure:
 ## Validation
 
 - `mvn test`
+- `mvn package`
 - `make example`
 - `make smoke`
 - benchmark summary when relevant

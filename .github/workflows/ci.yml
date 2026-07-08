@@ -21,5 +21,11 @@ jobs:
           java-version: "11"
           cache: maven
 
-      - name: Run tests
-        run: mvn test
+      - name: Run Maven tests
+        run: mvn -B test
+
+      - name: Build release artifacts
+        run: mvn -B -DskipTests package
+
+      - name: Run no-dependency smoke tests
+        run: make smoke
