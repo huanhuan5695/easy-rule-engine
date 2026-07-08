@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class TemplateMatcherApiSmokeTest {
     public static void main(String[] args) {
@@ -29,6 +30,8 @@ public class TemplateMatcherApiSmokeTest {
         matchOptionsCanLimitResultsPerCall();
         matchOptionsCanLimitStatesPerCall();
         allModeSharesStateBudgetAcrossMatchingPhases();
+        matchFirstReturnsHighestOrderedResult();
+        matchFirstHonorsOptionsAndReturnsEmptyWhenMissing();
         matchResultsListIsImmutable();
         publicValueObjectsSupportValueSemantics();
         slotSequenceFindsOverlappingValuesAcrossSlots();
@@ -396,6 +399,36 @@ public class TemplateMatcherApiSmokeTest {
                         "完全不相关",
                         MatchOptions.builder().mode(MatchMode.ALL).maxStates(1).build()),
                 "all mode should share one state budget across phases");
+    }
+
+    private static void matchFirstReturnsHighestOrderedResult() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "low", "我是[people]", 0))
+                .addPattern(RulePattern.exact("profile", "high", "我是[people]", 10))
+                .build();
+
+        Optional<TemplateMatcher.MatchResult> result = matcher.matchFirst("我是中国人");
+
+        assertTrue(result.isPresent(), "best result is present");
+        assertEquals("high", result.get().templateId(), "matchFirst returns highest ordered result");
+    }
+
+    private static void matchFirstHonorsOptionsAndReturnsEmptyWhenMissing() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addPattern(RulePattern.exact("exact", "exact-like-sing", "我[like][sing]"))
+                .addPattern(RulePattern.slotSequence("sequence", "sequence-like-sing", "[like]_[sing]"))
+                .build();
+
+        Optional<TemplateMatcher.MatchResult> result = matcher.matchFirst(
+                "我喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build());
+
+        assertTrue(result.isPresent(), "mode-specific best result is present");
+        assertEquals(PatternMode.SLOT_SEQUENCE, result.get().mode(), "matchFirst honors mode option");
+        assertTrue(matcher.matchFirst("完全不相关").isEmpty(), "missing input returns empty optional");
     }
 
     private static void matchResultsListIsImmutable() {

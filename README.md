@@ -500,6 +500,21 @@ List<TemplateMatcher.MatchResult> results = matcher.match(
                 .build());
 ```
 
+如果只关心排序后的最佳命中，可以使用 `matchFirst`，它返回 `Optional<MatchResult>`，无命中时不需要手动判断空列表：
+
+```java
+import java.util.Optional;
+
+Optional<TemplateMatcher.MatchResult> best = matcher.matchFirst(input);
+
+best.ifPresent(result -> {
+    System.out.println(result.category());
+    System.out.println(result.templateId());
+});
+```
+
+`matchFirst(input, options)` 会保留 `MatchOptions` 中的匹配策略和状态上限，并把本次返回数量收紧为 1。
+
 可用策略：
 
 - `EXACT_THEN_SLOT_SEQUENCE`：默认策略，精确优先，失败后槽位序列兜底。

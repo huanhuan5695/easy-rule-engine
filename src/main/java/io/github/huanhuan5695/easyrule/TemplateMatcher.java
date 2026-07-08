@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -79,6 +80,37 @@ public final class TemplateMatcher {
     }
 
     /**
+     * Matches input and returns the highest ordered result, if any.
+     *
+     * <p>This is a convenience wrapper around {@link #match(String, MatchOptions)}
+     * with the per-call result limit tightened to {@code 1}.
+     *
+     * @param input input text; {@code null} returns {@link Optional#empty()}
+     * @return best match result, or empty when nothing matches
+     */
+    public Optional<MatchResult> matchFirst(String input) {
+        return matchFirst(input, MatchOptions.defaultOptions());
+    }
+
+    /**
+     * Matches input with per-call options and returns the highest ordered result, if any.
+     *
+     * <p>The supplied matching mode and state limit are preserved, while the
+     * per-call result limit is tightened to {@code 1}.
+     *
+     * @param input input text; {@code null} returns {@link Optional#empty()}
+     * @param options per-call options; {@code null} uses default options
+     * @return best match result, or empty when nothing matches
+     */
+    public Optional<MatchResult> matchFirst(String input, MatchOptions options) {
+        List<MatchResult> results = match(input, singleResultOptions(options));
+        if (results.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(results.get(0));
+    }
+
+    /**
      * Matches input with per-call options.
      *
      * @param input input text; {@code null} returns an empty result list
@@ -116,6 +148,17 @@ public final class TemplateMatcher {
             return exactResults;
         }
         return matchSlotSequences(input, effectiveMaxResults, stateBudget);
+    }
+
+    private static MatchOptions singleResultOptions(MatchOptions options) {
+        MatchOptions effectiveOptions = options == null ? MatchOptions.defaultOptions() : options;
+        MatchOptions.Builder builder = MatchOptions.builder()
+                .mode(effectiveOptions.mode())
+                .maxResults(1);
+        if (effectiveOptions.maxStates() != null) {
+            builder.maxStates(effectiveOptions.maxStates());
+        }
+        return builder.build();
     }
 
     private List<MatchResult> matchExactTemplates(String input, int resultLimit, StateBudget stateBudget) {
