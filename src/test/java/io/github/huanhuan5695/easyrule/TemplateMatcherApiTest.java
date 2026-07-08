@@ -210,6 +210,45 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void publicValueObjectsSupportValueSemantics() {
+        RulePattern firstPattern = RulePattern.exact("profile", "nationality", "我是[people]", 7);
+        RulePattern secondPattern = RulePattern.exact("profile", "nationality", "我是[people]", 7);
+        assertEquals(firstPattern, secondPattern);
+        assertEquals(firstPattern.hashCode(), secondPattern.hashCode());
+        assertTrue(firstPattern.toString().contains("nationality"));
+
+        MatchOptions firstOptions = MatchOptions.builder()
+                .mode(MatchMode.ALL)
+                .maxResults(3)
+                .maxStates(50)
+                .build();
+        MatchOptions secondOptions = MatchOptions.builder()
+                .mode(MatchMode.ALL)
+                .maxResults(3)
+                .maxStates(50)
+                .build();
+        assertEquals(firstOptions, secondOptions);
+        assertEquals(firstOptions.hashCode(), secondOptions.hashCode());
+        assertTrue(firstOptions.toString().contains("ALL"));
+
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(firstPattern)
+                .build();
+        TemplateMatcher.MatchResult firstResult = matcher.match("我是中国人").get(0);
+        TemplateMatcher.MatchResult secondResult = matcher.match("我是中国人").get(0);
+
+        assertEquals(firstResult, secondResult);
+        assertEquals(firstResult.hashCode(), secondResult.hashCode());
+        assertTrue(firstResult.toString().contains("nationality"));
+        assertEquals(firstResult.slotCaptures().get("people").get(0), secondResult.slotCaptures().get("people").get(0));
+        assertEquals(
+                firstResult.slotCaptures().get("people").get(0).hashCode(),
+                secondResult.slotCaptures().get("people").get(0).hashCode());
+        assertTrue(firstResult.slotCaptures().get("people").get(0).toString().contains("中国人"));
+    }
+
+    @Test
     void slotSequenceFindsOverlappingValuesAcrossSlots() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("like", Arrays.asList("喜", "喜欢"))

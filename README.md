@@ -487,6 +487,7 @@ slotCaptures()
 
 - `captures()` 返回简化后的槽位值。
 - `slotCaptures()` 返回带位置的槽位命中详情。
+- `RulePattern`、`MatchOptions`、`MatchResult` 和 `SlotCapture` 都提供值语义的 `equals()`、`hashCode()` 和可读的 `toString()`，便于测试断言、日志排查和作为缓存 key。
 
 ## 设计约束
 

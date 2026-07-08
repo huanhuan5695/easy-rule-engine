@@ -147,6 +147,38 @@ public final class RulePattern {
         return priority;
     }
 
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof RulePattern)) {
+            return false;
+        }
+        RulePattern that = (RulePattern) other;
+        return priority == that.priority
+                && category.equals(that.category)
+                && templateId.equals(that.templateId)
+                && pattern.equals(that.pattern)
+                && mode == that.mode;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(category, templateId, pattern, mode, priority);
+    }
+
+    @Override
+    public String toString() {
+        return "RulePattern{"
+                + "category='" + category + '\''
+                + ", templateId='" + templateId + '\''
+                + ", pattern='" + pattern + '\''
+                + ", mode=" + mode
+                + ", priority=" + priority
+                + '}';
+    }
+
     private static String requireText(String value, String name) {
         if (value == null || value.isEmpty()) {
             throw new IllegalArgumentException(name + " is required");

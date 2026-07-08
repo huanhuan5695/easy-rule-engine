@@ -18,6 +18,7 @@ public class TemplateMatcherApiSmokeTest {
         matchOptionsCanLimitStatesPerCall();
         allModeSharesStateBudgetAcrossMatchingPhases();
         matchResultsListIsImmutable();
+        publicValueObjectsSupportValueSemantics();
         slotSequenceFindsOverlappingValuesAcrossSlots();
         duplicateDictionaryValuesDoNotDuplicateSlotSequenceResults();
 
@@ -219,6 +220,50 @@ public class TemplateMatcherApiSmokeTest {
         throw new AssertionError("match results list should be immutable");
     }
 
+    private static void publicValueObjectsSupportValueSemantics() {
+        RulePattern firstPattern = RulePattern.exact("profile", "nationality", "我是[people]", 7);
+        RulePattern secondPattern = RulePattern.exact("profile", "nationality", "我是[people]", 7);
+        assertEquals(firstPattern, secondPattern, "rule patterns compare by value");
+        assertEquals(firstPattern.hashCode(), secondPattern.hashCode(), "rule pattern hash code");
+        assertTrue(firstPattern.toString().contains("nationality"), "rule pattern string contains id");
+
+        MatchOptions firstOptions = MatchOptions.builder()
+                .mode(MatchMode.ALL)
+                .maxResults(3)
+                .maxStates(50)
+                .build();
+        MatchOptions secondOptions = MatchOptions.builder()
+                .mode(MatchMode.ALL)
+                .maxResults(3)
+                .maxStates(50)
+                .build();
+        assertEquals(firstOptions, secondOptions, "match options compare by value");
+        assertEquals(firstOptions.hashCode(), secondOptions.hashCode(), "match options hash code");
+        assertTrue(firstOptions.toString().contains("ALL"), "match options string contains mode");
+
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(firstPattern)
+                .build();
+        TemplateMatcher.MatchResult firstResult = matcher.match("我是中国人").get(0);
+        TemplateMatcher.MatchResult secondResult = matcher.match("我是中国人").get(0);
+
+        assertEquals(firstResult, secondResult, "match results compare by value");
+        assertEquals(firstResult.hashCode(), secondResult.hashCode(), "match result hash code");
+        assertTrue(firstResult.toString().contains("nationality"), "match result string contains id");
+        assertEquals(
+                firstResult.slotCaptures().get("people").get(0),
+                secondResult.slotCaptures().get("people").get(0),
+                "slot captures compare by value");
+        assertEquals(
+                firstResult.slotCaptures().get("people").get(0).hashCode(),
+                secondResult.slotCaptures().get("people").get(0).hashCode(),
+                "slot capture hash code");
+        assertTrue(
+                firstResult.slotCaptures().get("people").get(0).toString().contains("中国人"),
+                "slot capture string contains value");
+    }
+
     private static void slotSequenceFindsOverlappingValuesAcrossSlots() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("like", Arrays.asList("喜", "喜欢"))
@@ -258,6 +303,12 @@ public class TemplateMatcherApiSmokeTest {
     private static void assertEquals(Object expected, Object actual, String message) {
         if (!expected.equals(actual)) {
             throw new AssertionError(message + ": expected " + expected + ", got " + actual);
+        }
+    }
+
+    private static void assertTrue(boolean value, String message) {
+        if (!value) {
+            throw new AssertionError(message);
         }
     }
 

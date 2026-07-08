@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -655,6 +656,38 @@ public final class TemplateMatcher {
             return slotCaptures;
         }
 
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof MatchResult)) {
+                return false;
+            }
+            MatchResult that = (MatchResult) other;
+            return priority == that.priority
+                    && category.equals(that.category)
+                    && templateId.equals(that.templateId)
+                    && mode == that.mode
+                    && slotCaptures.equals(that.slotCaptures);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(category, templateId, priority, mode, slotCaptures);
+        }
+
+        @Override
+        public String toString() {
+            return "MatchResult{"
+                    + "category='" + category + '\''
+                    + ", templateId='" + templateId + '\''
+                    + ", priority=" + priority
+                    + ", mode=" + mode
+                    + ", slotCaptures=" + slotCaptures
+                    + '}';
+        }
+
         private static Map<String, List<SlotCapture>> freezeSlotCaptures(
                 Map<String, List<SlotCapture>> captures) {
             Map<String, List<SlotCapture>> frozen = new LinkedHashMap<>();
@@ -740,6 +773,36 @@ public final class TemplateMatcher {
          */
         public int end() {
             return end;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof SlotCapture)) {
+                return false;
+            }
+            SlotCapture that = (SlotCapture) other;
+            return start == that.start
+                    && end == that.end
+                    && slotName.equals(that.slotName)
+                    && value.equals(that.value);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(slotName, value, start, end);
+        }
+
+        @Override
+        public String toString() {
+            return "SlotCapture{"
+                    + "slotName='" + slotName + '\''
+                    + ", value='" + value + '\''
+                    + ", start=" + start
+                    + ", end=" + end
+                    + '}';
         }
     }
 

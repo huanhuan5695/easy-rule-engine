@@ -64,6 +64,34 @@ public final class MatchOptions {
         return maxStates;
     }
 
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof MatchOptions)) {
+            return false;
+        }
+        MatchOptions that = (MatchOptions) other;
+        return mode == that.mode
+                && Objects.equals(maxResults, that.maxResults)
+                && Objects.equals(maxStates, that.maxStates);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mode, maxResults, maxStates);
+    }
+
+    @Override
+    public String toString() {
+        return "MatchOptions{"
+                + "mode=" + mode
+                + ", maxResults=" + maxResults
+                + ", maxStates=" + maxStates
+                + '}';
+    }
+
     /**
      * Builder for {@link MatchOptions}.
      */
