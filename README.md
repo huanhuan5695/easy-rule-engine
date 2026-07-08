@@ -12,25 +12,38 @@
 ## 项目结构
 
 ```text
+pom.xml                # Maven 构建配置，包含 JUnit 5 测试依赖
+
 src/main/java/
   DoubleArrayTrie.java     # 双数组前缀树，用于高效字典前缀匹配
+  PatternMode.java         # 模板匹配模式枚举
+  RulePattern.java         # 稳定的规则模板描述对象
   TemplateMatcher.java     # 模板匹配器，支持严格模板和槽位序列两种模式
 
 src/test/java/
   DoubleArrayTrieTest.java # 双数组前缀树测试入口
   TemplateMatcherTest.java # 模板匹配器测试入口
+  TemplateMatcherApiTest.java      # JUnit 5 API 测试
+  TemplateMatcherApiSmokeTest.java # 无依赖 API smoke test
 ```
 
-项目当前不依赖 Maven 或 Gradle，可以直接用 `javac` 和 `java` 编译运行。
+项目提供 Maven 工程配置；如果本机暂时没有 Maven，也可以使用 `javac` 和 `java` 运行无依赖测试入口。
 
 ## 快速运行
 
-在项目根目录执行：
+推荐使用 Maven：
 
 ```bash
-javac -d /tmp/dat-test src/main/java/DoubleArrayTrie.java src/main/java/TemplateMatcher.java src/test/java/DoubleArrayTrieTest.java src/test/java/TemplateMatcherTest.java
+mvn test
+```
+
+如果本机没有 Maven，可以在项目根目录执行：
+
+```bash
+javac -d /tmp/dat-test src/main/java/DoubleArrayTrie.java src/main/java/PatternMode.java src/main/java/RulePattern.java src/main/java/TemplateMatcher.java src/test/java/DoubleArrayTrieTest.java src/test/java/TemplateMatcherTest.java src/test/java/TemplateMatcherApiSmokeTest.java
 java -cp /tmp/dat-test DoubleArrayTrieTest
 java -cp /tmp/dat-test TemplateMatcherTest
+java -cp /tmp/dat-test TemplateMatcherApiSmokeTest
 ```
 
 期望输出：
@@ -38,6 +51,7 @@ java -cp /tmp/dat-test TemplateMatcherTest
 ```text
 All DoubleArrayTrie tests passed.
 All TemplateMatcher tests passed.
+All TemplateMatcherApi smoke tests passed.
 ```
 
 ## 基本用法
@@ -48,7 +62,7 @@ All TemplateMatcher tests passed.
 TemplateMatcher matcher = TemplateMatcher.builder()
         .addSlotDictionary("people", Arrays.asList("中国人", "美国人", "学生"))
         .addSlotDictionary("song", Arrays.asList("青花瓷", "稻香"))
-        .addTemplate("music", "person-song", "[people]喜欢唱[song]")
+        .addPattern(RulePattern.exact("music", "person-song", "[people]喜欢唱[song]"))
         .build();
 
 List<TemplateMatcher.MatchResult> results = matcher.match("中国人喜欢唱青花瓷");
@@ -61,6 +75,7 @@ TemplateMatcher.MatchResult result = results.get(0);
 
 result.category();   // "music"
 result.templateId(); // "person-song"
+result.mode();       // PatternMode.EXACT
 result.captures();   // { people=["中国人"], song=["青花瓷"] }
 ```
 
@@ -294,13 +309,14 @@ addSlotDictionary(String slotName, Collection<String> values)
 ### 添加模板
 
 ```java
-addTemplate(String category, String templateId, String pattern)
+addPattern(RulePattern pattern)
 ```
 
 示例：
 
 ```java
-.addTemplate("travel", "from-city", "我来自[city]")
+.addPattern(RulePattern.exact("travel", "from-city", "我来自[city]"))
+.addPattern(RulePattern.slotSequence("music", "like-sing", "[like]_[sing]"))
 ```
 
 参数含义：
@@ -308,6 +324,15 @@ addTemplate(String category, String templateId, String pattern)
 - `category`：模板分类，例如 `music`、`travel`、`profile`。
 - `templateId`：模板唯一 ID。
 - `pattern`：模板内容，支持固定文本和 `[slotName]`。
+- `mode`：模板模式，推荐显式使用 `PatternMode.EXACT` 或 `PatternMode.SLOT_SEQUENCE`。
+
+为了兼容旧代码，仍然保留：
+
+```java
+addTemplate(String category, String templateId, String pattern)
+```
+
+该方法会根据 pattern 形态自动推断模式。
 
 ### 匹配输入
 
@@ -320,6 +345,7 @@ List<TemplateMatcher.MatchResult> results = matcher.match(input);
 ```java
 category()
 templateId()
+mode()
 captures()
 slotCaptures()
 ```
@@ -347,6 +373,7 @@ slotCaptures()
 这些测试展示了：
 
 - 普通词典前缀匹配
+- 显式 `RulePattern` / `PatternMode` API
 - 严格模板匹配
 - 多槽位抽取
 - 同名槽位多次捕获
