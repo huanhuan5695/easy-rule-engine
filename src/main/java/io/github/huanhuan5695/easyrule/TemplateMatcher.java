@@ -39,6 +39,7 @@ public final class TemplateMatcher {
     private final SlotScanIndex slotScanIndex;
     private final int maxStates;
     private final int maxResults;
+    private final Stats stats;
 
     private TemplateMatcher(
             Node root,
@@ -47,7 +48,8 @@ public final class TemplateMatcher {
             Map<String, DoubleArrayTrie> slotDictionaries,
             SlotScanIndex slotScanIndex,
             int maxStates,
-            int maxResults) {
+            int maxResults,
+            Stats stats) {
         this.root = root;
         this.sequenceTemplates = sequenceTemplates;
         this.sequenceSlotNames = sequenceSlotNames;
@@ -55,6 +57,7 @@ public final class TemplateMatcher {
         this.slotScanIndex = slotScanIndex;
         this.maxStates = maxStates;
         this.maxResults = maxResults;
+        this.stats = stats;
     }
 
     /**
@@ -64,6 +67,15 @@ public final class TemplateMatcher {
      */
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * Returns a snapshot of matcher configuration counts.
+     *
+     * @return immutable matcher statistics
+     */
+    public Stats stats() {
+        return stats;
     }
 
     /**
@@ -587,7 +599,31 @@ public final class TemplateMatcher {
                     new HashMap<>(slotDictionaries),
                     SlotScanIndex.build(sequenceSlotNames, slotValues),
                     maxStates,
-                    maxResults);
+                    maxResults,
+                    new Stats(
+                            countExactTemplates(root),
+                            sequenceTemplates.size(),
+                            slotDictionaries.size(),
+                            countSlotValues(slotDictionaries.values())));
+        }
+
+        private static int countExactTemplates(Node node) {
+            int count = node.outputs.size();
+            for (Node child : node.charChildren.values()) {
+                count += countExactTemplates(child);
+            }
+            for (SlotEdge edge : node.slotEdges) {
+                count += countExactTemplates(edge.next);
+            }
+            return count;
+        }
+
+        private static int countSlotValues(Collection<DoubleArrayTrie> dictionaries) {
+            int count = 0;
+            for (DoubleArrayTrie dictionary : dictionaries) {
+                count += dictionary.size();
+            }
+            return count;
         }
 
         private void validateReferencedSlotDictionaries() {
@@ -725,6 +761,107 @@ public final class TemplateMatcher {
                     throw new IllegalArgumentException("invalid slotName: " + slotName);
                 }
             }
+        }
+    }
+
+    /**
+     * Immutable matcher configuration statistics.
+     */
+    public static final class Stats {
+        private final int exactTemplateCount;
+        private final int slotSequenceTemplateCount;
+        private final int slotDictionaryCount;
+        private final int slotValueCount;
+
+        private Stats(
+                int exactTemplateCount,
+                int slotSequenceTemplateCount,
+                int slotDictionaryCount,
+                int slotValueCount) {
+            this.exactTemplateCount = exactTemplateCount;
+            this.slotSequenceTemplateCount = slotSequenceTemplateCount;
+            this.slotDictionaryCount = slotDictionaryCount;
+            this.slotValueCount = slotValueCount;
+        }
+
+        /**
+         * Returns the number of exact templates.
+         *
+         * @return exact template count
+         */
+        public int exactTemplateCount() {
+            return exactTemplateCount;
+        }
+
+        /**
+         * Returns the number of slot-sequence templates.
+         *
+         * @return slot-sequence template count
+         */
+        public int slotSequenceTemplateCount() {
+            return slotSequenceTemplateCount;
+        }
+
+        /**
+         * Returns the total number of templates.
+         *
+         * @return total template count
+         */
+        public int templateCount() {
+            return exactTemplateCount + slotSequenceTemplateCount;
+        }
+
+        /**
+         * Returns the number of slot dictionaries.
+         *
+         * @return slot dictionary count
+         */
+        public int slotDictionaryCount() {
+            return slotDictionaryCount;
+        }
+
+        /**
+         * Returns the total number of unique non-empty slot values.
+         *
+         * @return slot value count
+         */
+        public int slotValueCount() {
+            return slotValueCount;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Stats)) {
+                return false;
+            }
+            Stats that = (Stats) other;
+            return exactTemplateCount == that.exactTemplateCount
+                    && slotSequenceTemplateCount == that.slotSequenceTemplateCount
+                    && slotDictionaryCount == that.slotDictionaryCount
+                    && slotValueCount == that.slotValueCount;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(
+                    exactTemplateCount,
+                    slotSequenceTemplateCount,
+                    slotDictionaryCount,
+                    slotValueCount);
+        }
+
+        @Override
+        public String toString() {
+            return "Stats{"
+                    + "templateCount=" + templateCount()
+                    + ", exactTemplateCount=" + exactTemplateCount
+                    + ", slotSequenceTemplateCount=" + slotSequenceTemplateCount
+                    + ", slotDictionaryCount=" + slotDictionaryCount
+                    + ", slotValueCount=" + slotValueCount
+                    + '}';
         }
     }
 

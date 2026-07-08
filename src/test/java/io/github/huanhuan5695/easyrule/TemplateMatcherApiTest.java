@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -142,6 +143,38 @@ class TemplateMatcherApiTest {
                 .build();
 
         assertEquals(2, matcher.match("我是中国人").size());
+    }
+
+    @Test
+    void matcherStatsDescribeLoadedConfiguration() {
+        RulePattern exact = RulePattern.exact("profile", "nationality", "我是[people]");
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人", "中国人", "学生"))
+                .addSlotDictionary("song", DoubleArrayTrie.build(Arrays.asList("青花瓷", "稻香")))
+                .addPattern(exact)
+                .addPattern(exact)
+                .addPattern(RulePattern.slotSequence("music", "person-song", "[people]_[song]"))
+                .build();
+        TemplateMatcher equivalentMatcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人", "中国人", "学生"))
+                .addSlotDictionary("song", DoubleArrayTrie.build(Arrays.asList("青花瓷", "稻香")))
+                .addPattern(exact)
+                .addPattern(exact)
+                .addPattern(RulePattern.slotSequence("music", "person-song", "[people]_[song]"))
+                .build();
+
+        TemplateMatcher.Stats stats = matcher.stats();
+        TemplateMatcher.Stats sameStats = equivalentMatcher.stats();
+
+        assertEquals(2, stats.templateCount());
+        assertEquals(1, stats.exactTemplateCount());
+        assertEquals(1, stats.slotSequenceTemplateCount());
+        assertEquals(2, stats.slotDictionaryCount());
+        assertEquals(4, stats.slotValueCount());
+        assertNotSame(stats, sameStats);
+        assertEquals(stats, sameStats);
+        assertEquals(stats.hashCode(), sameStats.hashCode());
+        assertTrue(stats.toString().contains("templateCount=2"));
     }
 
     @Test

@@ -18,6 +18,7 @@ public class TemplateMatcherApiSmokeTest {
         strictSlotValidationAllowsCompleteDictionaries();
         strictTemplateIdValidationFailsForDuplicateIdsInSameCategory();
         strictTemplateIdValidationAllowsSameIdInDifferentCategories();
+        matcherStatsDescribeLoadedConfiguration();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderCanRegisterTrieDictionariesInBatches();
         builderBatchRegistrationRejectsNullInputs();
@@ -178,6 +179,37 @@ public class TemplateMatcherApiSmokeTest {
                 .build();
 
         assertEquals(2, matcher.match("我是中国人").size(), "same id can be reused across categories");
+    }
+
+    private static void matcherStatsDescribeLoadedConfiguration() {
+        RulePattern exact = RulePattern.exact("profile", "nationality", "我是[people]");
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人", "中国人", "学生"))
+                .addSlotDictionary("song", DoubleArrayTrie.build(Arrays.asList("青花瓷", "稻香")))
+                .addPattern(exact)
+                .addPattern(exact)
+                .addPattern(RulePattern.slotSequence("music", "person-song", "[people]_[song]"))
+                .build();
+        TemplateMatcher equivalentMatcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人", "中国人", "学生"))
+                .addSlotDictionary("song", DoubleArrayTrie.build(Arrays.asList("青花瓷", "稻香")))
+                .addPattern(exact)
+                .addPattern(exact)
+                .addPattern(RulePattern.slotSequence("music", "person-song", "[people]_[song]"))
+                .build();
+
+        TemplateMatcher.Stats stats = matcher.stats();
+        TemplateMatcher.Stats sameStats = equivalentMatcher.stats();
+
+        assertEquals(2, stats.templateCount(), "stats count unique templates");
+        assertEquals(1, stats.exactTemplateCount(), "stats count exact templates");
+        assertEquals(1, stats.slotSequenceTemplateCount(), "stats count slot sequence templates");
+        assertEquals(2, stats.slotDictionaryCount(), "stats count slot dictionaries");
+        assertEquals(4, stats.slotValueCount(), "stats count unique slot values");
+        assertTrue(stats != sameStats, "stats value semantics compare distinct instances");
+        assertEquals(stats, sameStats, "stats compare by value");
+        assertEquals(stats.hashCode(), sameStats.hashCode(), "stats hash code");
+        assertTrue(stats.toString().contains("templateCount=2"), "stats string contains counts");
     }
 
     private static void builderCanRegisterDictionariesAndPatternsInBatches() {

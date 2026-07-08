@@ -537,7 +537,21 @@ slotCaptures()
 
 - `captures()` 返回简化后的槽位值。
 - `slotCaptures()` 返回带位置的槽位命中详情。
-- `RulePattern`、`MatchOptions`、`MatchResult` 和 `SlotCapture` 都提供值语义的 `equals()`、`hashCode()` 和可读的 `toString()`，便于测试断言、日志排查和作为缓存 key。
+- `RulePattern`、`MatchOptions`、`MatchResult`、`SlotCapture` 和 `Stats` 都提供值语义的 `equals()`、`hashCode()` 和可读的 `toString()`，便于测试断言、日志排查和作为缓存 key。
+
+### 配置统计
+
+构建完成后可以读取不可变统计快照，用于服务启动日志、健康检查或排查规则加载问题：
+
+```java
+TemplateMatcher.Stats stats = matcher.stats();
+
+stats.templateCount();
+stats.exactTemplateCount();
+stats.slotSequenceTemplateCount();
+stats.slotDictionaryCount();
+stats.slotValueCount();
+```
 
 ## 设计约束
 
