@@ -309,6 +309,22 @@ public final class TemplateMatcher {
         }
 
         /**
+         * Adds or replaces multiple slot dictionaries from raw values.
+         *
+         * @param dictionaries map from slot name to dictionary values
+         * @return this builder
+         */
+        public Builder addSlotDictionaries(Map<String, ? extends Collection<String>> dictionaries) {
+            if (dictionaries == null) {
+                throw new IllegalArgumentException("dictionaries is required");
+            }
+            for (Map.Entry<String, ? extends Collection<String>> entry : dictionaries.entrySet()) {
+                addSlotDictionary(entry.getKey(), entry.getValue());
+            }
+            return this;
+        }
+
+        /**
          * Adds or replaces a slot dictionary from an existing trie.
          *
          * <p>Tries supplied this way are used for exact matching and fallback
@@ -376,6 +392,22 @@ public final class TemplateMatcher {
                 }
             }
             node.outputs.add(new TemplateMeta(pattern.category(), pattern.templateId(), pattern.priority()));
+            return this;
+        }
+
+        /**
+         * Adds multiple rule patterns in iteration order.
+         *
+         * @param patterns rule patterns
+         * @return this builder
+         */
+        public Builder addPatterns(Collection<RulePattern> patterns) {
+            if (patterns == null) {
+                throw new IllegalArgumentException("patterns is required");
+            }
+            for (RulePattern pattern : patterns) {
+                addPattern(pattern);
+            }
             return this;
         }
 

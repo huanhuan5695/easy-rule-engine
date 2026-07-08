@@ -377,6 +377,14 @@ addSlotDictionary(String slotName, Collection<String> values)
 .addSlotDictionary("city", Arrays.asList("北京", "上海", "杭州"))
 ```
 
+从配置文件批量加载时，可以使用：
+
+```java
+.addSlotDictionaries(Map.of(
+        "people", Arrays.asList("中国人", "美国人"),
+        "song", Arrays.asList("青花瓷", "稻香")))
+```
+
 也可以直接传入已经构建好的 `DoubleArrayTrie`：
 
 ```java
@@ -394,6 +402,14 @@ addPattern(RulePattern pattern)
 ```java
 .addPattern(RulePattern.exact("travel", "from-city", "我来自[city]"))
 .addPattern(RulePattern.slotSequence("music", "like-sing", "[like]_[sing]"))
+```
+
+批量注册模板：
+
+```java
+.addPatterns(Arrays.asList(
+        RulePattern.exact("travel", "from-city", "我来自[city]"),
+        RulePattern.slotSequence("music", "like-sing", "[like]_[sing]")))
 ```
 
 如果多个模板都命中同一段输入，可以给规则设置优先级。数字越大，结果越靠前：

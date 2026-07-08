@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -115,6 +116,32 @@ class TemplateMatcherApiTest {
                 .build();
 
         assertEquals(1, matcher.match("我喜欢唱歌").size());
+    }
+
+    @Test
+    void builderCanRegisterDictionariesAndPatternsInBatches() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictSlotValidation()
+                .addSlotDictionaries(Map.of(
+                        "people", Arrays.asList("中国人"),
+                        "song", Arrays.asList("青花瓷")))
+                .addPatterns(Arrays.asList(
+                        RulePattern.exact("music", "person-song", "[people]喜欢唱[song]"),
+                        RulePattern.slotSequence("music", "sequence", "[people]_[song]")))
+                .build();
+
+        assertEquals("person-song", matcher.match("中国人喜欢唱青花瓷").get(0).templateId());
+        assertEquals(1, matcher.match(
+                "他说中国人唱青花瓷",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).size());
+    }
+
+    @Test
+    void builderBatchRegistrationRejectsNullInputs() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder();
+
+        assertThrows(IllegalArgumentException.class, () -> builder.addSlotDictionaries(null));
+        assertThrows(IllegalArgumentException.class, () -> builder.addPatterns(null));
     }
 
     @Test

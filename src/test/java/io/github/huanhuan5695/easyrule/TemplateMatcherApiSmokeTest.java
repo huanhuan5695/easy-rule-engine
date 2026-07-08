@@ -2,6 +2,7 @@ package io.github.huanhuan5695.easyrule;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class TemplateMatcherApiSmokeTest {
     public static void main(String[] args) {
@@ -13,6 +14,8 @@ public class TemplateMatcherApiSmokeTest {
         higherPriorityResultsAreReturnedFirst();
         strictSlotValidationFailsFastForMissingDictionaries();
         strictSlotValidationAllowsCompleteDictionaries();
+        builderCanRegisterDictionariesAndPatternsInBatches();
+        builderBatchRegistrationRejectsNullInputs();
         matchOptionsCanForceSlotSequenceMode();
         matchOptionsCanLimitResultsPerCall();
         matchOptionsCanLimitStatesPerCall();
@@ -138,6 +141,44 @@ public class TemplateMatcherApiSmokeTest {
                 .build();
 
         assertEquals(1, matcher.match("我喜欢唱歌").size(), "complete dictionaries build and match");
+    }
+
+    private static void builderCanRegisterDictionariesAndPatternsInBatches() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictSlotValidation()
+                .addSlotDictionaries(Map.of(
+                        "people", Arrays.asList("中国人"),
+                        "song", Arrays.asList("青花瓷")))
+                .addPatterns(Arrays.asList(
+                        RulePattern.exact("music", "person-song", "[people]喜欢唱[song]"),
+                        RulePattern.slotSequence("music", "sequence", "[people]_[song]")))
+                .build();
+
+        assertEquals(
+                "person-song",
+                matcher.match("中国人喜欢唱青花瓷").get(0).templateId(),
+                "batch exact pattern matches");
+        assertEquals(
+                1,
+                matcher.match(
+                        "他说中国人唱青花瓷",
+                        MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).size(),
+                "batch slot sequence pattern matches");
+    }
+
+    private static void builderBatchRegistrationRejectsNullInputs() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                null,
+                () -> builder.addSlotDictionaries(null),
+                "batch dictionaries should reject null input");
+        assertThrows(
+                IllegalArgumentException.class,
+                null,
+                () -> builder.addPatterns(null),
+                "batch patterns should reject null input");
     }
 
     private static void matchOptionsCanForceSlotSequenceMode() {
