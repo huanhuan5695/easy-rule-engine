@@ -219,4 +219,21 @@ class TemplateMatcherApiTest {
         assertEquals("喜", results.get(2).captures().get("like").get(0));
         assertEquals("唱歌", results.get(2).captures().get("sing").get(0));
     }
+
+    @Test
+    void duplicateDictionaryValuesDoNotDuplicateSlotSequenceResults() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("like", Arrays.asList("喜欢", "喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌", "唱歌"))
+                .addPattern(RulePattern.slotSequence("music", "like-sing", "[like]_[sing]"))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match(
+                "我喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build());
+
+        assertEquals(1, results.size());
+        assertEquals("喜欢", results.get(0).captures().get("like").get(0));
+        assertEquals("唱歌", results.get(0).captures().get("sing").get(0));
+    }
 }

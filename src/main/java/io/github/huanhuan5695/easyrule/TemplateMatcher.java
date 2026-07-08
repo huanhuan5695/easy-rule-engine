@@ -521,8 +521,9 @@ public final class TemplateMatcher {
 
         private static List<String> copyDictionaryValues(Collection<String> values) {
             List<String> copy = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
             for (String value : values) {
-                if (value != null && !value.isEmpty()) {
+                if (value != null && !value.isEmpty() && seen.add(value)) {
                     copy.add(value);
                 }
             }

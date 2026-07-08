@@ -18,6 +18,7 @@ public class TemplateMatcherApiSmokeTest {
         allModeSharesStateBudgetAcrossMatchingPhases();
         matchResultsListIsImmutable();
         slotSequenceFindsOverlappingValuesAcrossSlots();
+        duplicateDictionaryValuesDoNotDuplicateSlotSequenceResults();
 
         System.out.println("All TemplateMatcherApi smoke tests passed.");
     }
@@ -217,6 +218,22 @@ public class TemplateMatcherApiSmokeTest {
         assertEquals("欢唱", results.get(1).captures().get("sing").get(0), "overlapping next slot retained");
         assertEquals("喜", results.get(2).captures().get("like").get(0), "short capture can skip to later slot");
         assertEquals("唱歌", results.get(2).captures().get("sing").get(0), "later slot retained after short capture");
+    }
+
+    private static void duplicateDictionaryValuesDoNotDuplicateSlotSequenceResults() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("like", Arrays.asList("喜欢", "喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌", "唱歌"))
+                .addPattern(RulePattern.slotSequence("music", "like-sing", "[like]_[sing]"))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match(
+                "我喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build());
+
+        assertEquals(1, results.size(), "duplicate dictionary values should not duplicate results");
+        assertEquals("喜欢", results.get(0).captures().get("like").get(0), "single like capture");
+        assertEquals("唱歌", results.get(0).captures().get("sing").get(0), "single sing capture");
     }
 
     private static void assertEquals(Object expected, Object actual, String message) {
