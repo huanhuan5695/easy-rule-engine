@@ -6,6 +6,8 @@ public class TemplateMatcherApiSmokeTest {
         exactModeIsExplicitAndReturnsSlotSpans();
         slotSequenceModeIsExplicitAndOnlyUsedAfterExactMiss();
         explicitSlotSequenceRejectsFixedTextOtherThanUnderscore();
+        builtMatcherIsNotChangedByLaterBuilderMutations();
+        higherPriorityResultsAreReturnedFirst();
 
         System.out.println("All TemplateMatcherApi smoke tests passed.");
     }
@@ -54,6 +56,33 @@ public class TemplateMatcherApiSmokeTest {
             return;
         }
         throw new AssertionError("slot sequence should reject fixed text other than underscore");
+    }
+
+    private static void builtMatcherIsNotChangedByLaterBuilderMutations() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "first", "我是[people]"));
+
+        TemplateMatcher first = builder.build();
+        builder.addPattern(RulePattern.exact("profile", "later", "他是[people]"));
+        TemplateMatcher second = builder.build();
+
+        assertEquals(0, first.match("他是中国人").size(), "first matcher keeps build-time snapshot");
+        assertEquals(1, second.match("他是中国人").size(), "second matcher sees later pattern");
+    }
+
+    private static void higherPriorityResultsAreReturnedFirst() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "low", "我是[people]", 0))
+                .addPattern(RulePattern.exact("profile", "high", "我是[people]", 10))
+                .build();
+
+        List<TemplateMatcher.MatchResult> results = matcher.match("我是中国人");
+
+        assertEquals(2, results.size(), "two priority results");
+        assertEquals("high", results.get(0).templateId(), "higher priority first");
+        assertEquals("low", results.get(1).templateId(), "lower priority second");
     }
 
     private static void assertEquals(Object expected, Object actual, String message) {
