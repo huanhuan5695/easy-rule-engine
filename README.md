@@ -330,9 +330,7 @@ TEXT("歌")
 like -> sing
 ```
 
-匹配时会先为槽位序列所需的字典构建共享扫描索引。通过 `Collection<String>` 添加的槽位字典会进入该索引，输入文本只需要扫描一次，就能收集多个槽位的命中项。每找到一个槽位，就记录它的值、起始位置和结束位置，然后继续推进下一个槽位。
-
-如果调用方通过 `addSlotDictionary(String, DoubleArrayTrie)` 直接传入已经构建好的双数组前缀树，该槽位会走兼容路径：只在需要该槽位时单独扫描。这样可以保留高级用法，同时让常规用法获得更好的槽位序列匹配性能。
+匹配时会先为槽位序列所需的字典构建共享扫描索引。通过 `Collection<String>` 添加的槽位字典和通过 `DoubleArrayTrie` 传入的预构建字典都会进入该索引，输入文本只需要扫描一次，就能收集多个槽位的命中项。每找到一个槽位，就记录它的值、起始位置和结束位置，然后继续推进下一个槽位。
 
 该模式允许输入前后有额外文本，例如：
 
@@ -553,9 +551,9 @@ slotCaptures()
 - 重复注册同一个 `RulePattern` 会按值语义去重，避免配置文件重复项造成重复匹配结果。
 - `build()` 会生成当前 Builder 状态的快照；后续继续给 Builder 添加模板不会影响已经构建好的 matcher。
 - `match()` 返回的结果列表、槽位 map 和槽位列表都是不可变集合，调用方可以安全共享结果对象。
-- `DoubleArrayTrie.commonPrefixSearch()` 返回不可变列表；`DoubleArrayTrie.build()` 要求传入非空集合对象，但会忽略集合中的 `null` 和空字符串；`size()` 返回去重后的有效词条数量。
+- `DoubleArrayTrie.commonPrefixSearch()` 和 `DoubleArrayTrie.words()` 返回不可变列表；`DoubleArrayTrie.build()` 要求传入非空集合对象，但会忽略集合中的 `null` 和空字符串；`size()` 返回去重后的有效词条数量。
 - 通过 `Collection<String>` 添加槽位字典时，会保留首次出现的有效值并忽略重复值，避免脏数据造成重复槽位序列结果。
-- 槽位序列匹配会基于共享扫描索引收集命中项，避免多个 sequence 模板重复扫描同一段文本。直接传入 `DoubleArrayTrie` 的槽位会自动回退到逐槽扫描。
+- 槽位序列匹配会基于共享扫描索引收集命中项，避免多个 sequence 模板重复扫描同一段文本；直接传入 `DoubleArrayTrie` 的槽位也会复用该索引。
 
 ## 示例测试
 

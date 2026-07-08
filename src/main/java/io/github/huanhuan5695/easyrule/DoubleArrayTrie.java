@@ -23,14 +23,21 @@ public final class DoubleArrayTrie {
     private final int[] check;
     private final String[] values;
     private final Map<Character, Integer> codes;
+    private final List<String> words;
     private final int size;
 
-    private DoubleArrayTrie(int[] base, int[] check, String[] values, Map<Character, Integer> codes, int size) {
+    private DoubleArrayTrie(
+            int[] base,
+            int[] check,
+            String[] values,
+            Map<Character, Integer> codes,
+            List<String> words) {
         this.base = base;
         this.check = check;
         this.values = values;
         this.codes = codes;
-        this.size = size;
+        this.words = words;
+        this.size = words.size();
     }
 
     /**
@@ -66,7 +73,7 @@ public final class DoubleArrayTrie {
         Builder builder = new Builder(codes);
         builder.check[ROOT] = -1;
         builder.place(root, ROOT);
-        return builder.toTrie(size);
+        return builder.toTrie(words(root, size));
     }
 
     /**
@@ -76,6 +83,15 @@ public final class DoubleArrayTrie {
      */
     public int size() {
         return size;
+    }
+
+    /**
+     * Returns the unique non-empty words indexed by this trie.
+     *
+     * @return immutable indexed words in deterministic order
+     */
+    public List<String> words() {
+        return words;
     }
 
     /**
@@ -195,6 +211,21 @@ public final class DoubleArrayTrie {
         return new HashMap<>(codes);
     }
 
+    private static List<String> words(BuildNode root, int size) {
+        List<String> words = new ArrayList<>(size);
+        collectWords(root, words);
+        return Collections.unmodifiableList(words);
+    }
+
+    private static void collectWords(BuildNode node, List<String> words) {
+        if (node.value != null) {
+            words.add(node.value);
+        }
+        for (BuildNode child : node.children.values()) {
+            collectWords(child, words);
+        }
+    }
+
     private static final class BuildNode {
         private final Map<Integer, BuildNode> children = new TreeMap<>();
         private String value;
@@ -272,8 +303,13 @@ public final class DoubleArrayTrie {
             values = newValues;
         }
 
-        private DoubleArrayTrie toTrie(int size) {
-            return new DoubleArrayTrie(base, check, values, codes, size);
+        private DoubleArrayTrie toTrie(List<String> words) {
+            return new DoubleArrayTrie(
+                    base,
+                    check,
+                    values,
+                    Collections.unmodifiableMap(new HashMap<>(codes)),
+                    words);
         }
     }
 }

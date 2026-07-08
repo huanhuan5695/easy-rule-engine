@@ -26,6 +26,8 @@ public class DoubleArrayTrieTest {
 
         DoubleArrayTrie compacted = DoubleArrayTrie.build(Arrays.asList("he", "he", "", null, "her"));
         assertEquals(2, compacted.size(), "counts unique non-empty words");
+        assertEquals(Arrays.asList("he", "her"), compacted.words(), "returns unique non-empty words");
+        assertThrows(UnsupportedOperationException.class, () -> compacted.words().clear(), "words are immutable");
 
         System.out.println("All DoubleArrayTrie tests passed.");
     }

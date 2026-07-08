@@ -369,9 +369,8 @@ public final class TemplateMatcher {
         /**
          * Adds or replaces a slot dictionary from an existing trie.
          *
-         * <p>Tries supplied this way are used for exact matching and fallback
-         * slot-sequence scanning, but their raw values are not available to the
-         * shared scan index.
+         * <p>Trie words are reused by the shared slot-sequence scan index, so
+         * prebuilt dictionaries keep the same scan path as raw value dictionaries.
          *
          * @param slotName slot name used in patterns without brackets
          * @param trie immutable dictionary trie
@@ -383,7 +382,7 @@ public final class TemplateMatcher {
                 throw new IllegalArgumentException("trie is required");
             }
             slotDictionaries.put(slotName, trie);
-            slotValues.remove(slotName);
+            slotValues.put(slotName, trie.words());
             return this;
         }
 
