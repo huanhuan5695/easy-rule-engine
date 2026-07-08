@@ -146,7 +146,7 @@ public final class TemplateMatcher {
                     continue;
                 }
 
-                List<String> candidates = dictionary.commonPrefixSearch(input, state.inputPos);
+                List<String> candidates = new ArrayList<>(dictionary.commonPrefixSearch(input, state.inputPos));
                 candidates.sort(Comparator.comparingInt(String::length).reversed());
 
                 for (String candidate : candidates) {
@@ -223,7 +223,7 @@ public final class TemplateMatcher {
 
             List<SlotHit> hits = new ArrayList<>();
             for (int pos = 0; pos < input.length(); pos++) {
-                List<String> candidates = dictionary.commonPrefixSearch(input, pos);
+                List<String> candidates = new ArrayList<>(dictionary.commonPrefixSearch(input, pos));
                 candidates.sort(Comparator.comparingInt(String::length).reversed());
                 for (String candidate : candidates) {
                     if (!candidate.isEmpty()) {

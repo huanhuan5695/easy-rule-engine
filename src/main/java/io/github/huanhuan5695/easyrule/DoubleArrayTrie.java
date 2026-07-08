@@ -34,10 +34,13 @@ public final class DoubleArrayTrie {
     /**
      * Builds a trie from the supplied words.
      *
-     * @param words words to index; null and empty entries are ignored
+     * @param words words to index; null and empty entries are ignored, but the collection itself is required
      * @return immutable trie
      */
     public static DoubleArrayTrie build(Collection<String> words) {
+        if (words == null) {
+            throw new IllegalArgumentException("words is required");
+        }
         BuildNode root = new BuildNode();
         Map<Character, Integer> codes = buildCharacterCodes(words);
 
@@ -88,7 +91,7 @@ public final class DoubleArrayTrie {
      * Finds dictionary words that are prefixes of {@code text}.
      *
      * @param text text to scan from offset {@code 0}
-     * @return matching dictionary words in increasing end-position order
+     * @return immutable matching dictionary words in increasing end-position order
      */
     public List<String> commonPrefixSearch(String text) {
         return commonPrefixSearch(text, 0);
@@ -99,7 +102,7 @@ public final class DoubleArrayTrie {
      *
      * @param text text to scan
      * @param offset zero-based scan offset
-     * @return matching dictionary words in increasing end-position order
+     * @return immutable matching dictionary words in increasing end-position order
      */
     public List<String> commonPrefixSearch(String text, int offset) {
         if (text == null) {
@@ -128,7 +131,7 @@ public final class DoubleArrayTrie {
                 matches.add(values[terminal]);
             }
         }
-        return matches;
+        return Collections.unmodifiableList(matches);
     }
 
     private int traverse(String text) {

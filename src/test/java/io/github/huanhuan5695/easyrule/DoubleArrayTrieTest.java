@@ -20,6 +20,9 @@ public class DoubleArrayTrieTest {
         List<String> prefixes = trie.commonPrefixSearch("herself");
         assertEquals(Arrays.asList("he", "her"), prefixes, "finds words that prefix input");
 
+        assertThrows(UnsupportedOperationException.class, () -> prefixes.clear(), "prefix results are immutable");
+        assertThrows(IllegalArgumentException.class, () -> DoubleArrayTrie.build(null), "null word collection rejected");
+
         System.out.println("All DoubleArrayTrie tests passed.");
     }
 
@@ -39,5 +42,21 @@ public class DoubleArrayTrieTest {
         if (!expected.equals(actual)) {
             throw new AssertionError(message + ": expected " + expected + ", got " + actual);
         }
+    }
+
+    private static void assertThrows(Class<? extends Throwable> expected, ThrowingRunnable runnable, String message) {
+        try {
+            runnable.run();
+        } catch (Throwable actual) {
+            if (expected.isInstance(actual)) {
+                return;
+            }
+            throw new AssertionError(message + ": expected " + expected.getName() + ", got " + actual, actual);
+        }
+        throw new AssertionError(message + ": expected " + expected.getName());
+    }
+
+    private interface ThrowingRunnable {
+        void run();
     }
 }
