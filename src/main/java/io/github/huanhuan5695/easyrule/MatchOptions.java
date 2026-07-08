@@ -10,15 +10,17 @@ public final class MatchOptions {
 
     private final MatchMode mode;
     private final Integer maxResults;
+    private final Integer maxStates;
 
-    private MatchOptions(MatchMode mode, Integer maxResults) {
+    private MatchOptions(MatchMode mode, Integer maxResults, Integer maxStates) {
         this.mode = Objects.requireNonNull(mode, "mode");
         this.maxResults = maxResults;
+        this.maxStates = maxStates;
     }
 
     /**
      * Returns the default options: {@link MatchMode#EXACT_THEN_SLOT_SEQUENCE}
-     * with the matcher-level result limit.
+     * with matcher-level result and state limits.
      *
      * @return shared immutable default options
      */
@@ -54,11 +56,21 @@ public final class MatchOptions {
     }
 
     /**
+     * Returns the per-call state limit, or {@code null} to use the matcher-level limit.
+     *
+     * @return maximum visited internal states or {@code null}
+     */
+    public Integer maxStates() {
+        return maxStates;
+    }
+
+    /**
      * Builder for {@link MatchOptions}.
      */
     public static final class Builder {
         private MatchMode mode = MatchMode.EXACT_THEN_SLOT_SEQUENCE;
         private Integer maxResults;
+        private Integer maxStates;
 
         private Builder() {
         }
@@ -89,12 +101,28 @@ public final class MatchOptions {
         }
 
         /**
+         * Sets a positive per-call maximum number of visited internal states.
+         *
+         * <p>This can lower, but not raise, the matcher-level state limit.
+         *
+         * @param maxStates maximum number of internal states to visit
+         * @return this builder
+         */
+        public Builder maxStates(int maxStates) {
+            if (maxStates <= 0) {
+                throw new IllegalArgumentException("maxStates must be positive");
+            }
+            this.maxStates = maxStates;
+            return this;
+        }
+
+        /**
          * Builds immutable match options.
          *
          * @return match options
          */
         public MatchOptions build() {
-            return new MatchOptions(mode, maxResults);
+            return new MatchOptions(mode, maxResults, maxStates);
         }
     }
 }

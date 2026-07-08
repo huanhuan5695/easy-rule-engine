@@ -89,36 +89,39 @@ public final class TemplateMatcher {
         int effectiveMaxResults = effectiveOptions.maxResults() == null
                 ? maxResults
                 : Math.min(maxResults, effectiveOptions.maxResults());
+        int effectiveMaxStates = effectiveOptions.maxStates() == null
+                ? maxStates
+                : Math.min(maxStates, effectiveOptions.maxStates());
 
         if (effectiveOptions.mode() == MatchMode.EXACT_ONLY) {
-            return matchExactTemplates(input, effectiveMaxResults);
+            return matchExactTemplates(input, effectiveMaxResults, effectiveMaxStates);
         }
         if (effectiveOptions.mode() == MatchMode.SLOT_SEQUENCE_ONLY) {
-            return matchSlotSequences(input, effectiveMaxResults);
+            return matchSlotSequences(input, effectiveMaxResults, effectiveMaxStates);
         }
         if (effectiveOptions.mode() == MatchMode.ALL) {
             List<MatchResult> results = new ArrayList<>();
-            results.addAll(matchExactTemplates(input, maxResults));
-            results.addAll(matchSlotSequences(input, maxResults));
+            results.addAll(matchExactTemplates(input, maxResults, effectiveMaxStates));
+            results.addAll(matchSlotSequences(input, maxResults, effectiveMaxStates));
             return sortAndLimit(results, effectiveMaxResults);
         }
 
-        List<MatchResult> exactResults = matchExactTemplates(input, effectiveMaxResults);
+        List<MatchResult> exactResults = matchExactTemplates(input, effectiveMaxResults, effectiveMaxStates);
         if (!exactResults.isEmpty()) {
             return exactResults;
         }
-        return matchSlotSequences(input, effectiveMaxResults);
+        return matchSlotSequences(input, effectiveMaxResults, effectiveMaxStates);
     }
 
-    private List<MatchResult> matchExactTemplates(String input, int resultLimit) {
+    private List<MatchResult> matchExactTemplates(String input, int resultLimit, int stateLimit) {
         List<MatchResult> results = new ArrayList<>();
         ArrayDeque<MatchState> queue = new ArrayDeque<>();
         queue.add(new MatchState(root, 0, new LinkedHashMap<String, List<SlotCapture>>()));
 
         int visitedStates = 0;
         while (!queue.isEmpty()) {
-            if (++visitedStates > maxStates) {
-                throw new IllegalStateException("exact template matching exceeded maxStates=" + maxStates);
+            if (++visitedStates > stateLimit) {
+                throw new IllegalStateException("exact template matching exceeded maxStates=" + stateLimit);
             }
 
             MatchState state = queue.removeFirst();
@@ -165,7 +168,7 @@ public final class TemplateMatcher {
         return sortAndLimit(results, resultLimit);
     }
 
-    private List<MatchResult> matchSlotSequences(String input, int resultLimit) {
+    private List<MatchResult> matchSlotSequences(String input, int resultLimit, int stateLimit) {
         List<MatchResult> results = new ArrayList<>();
         int visitedStates = 0;
         Map<String, List<SlotHit>> hitsBySlot = collectSlotHits(input);
@@ -175,8 +178,8 @@ public final class TemplateMatcher {
             queue.add(new SequenceState(0, 0, new LinkedHashMap<String, List<SlotCapture>>()));
 
             while (!queue.isEmpty()) {
-                if (++visitedStates > maxStates) {
-                    throw new IllegalStateException("slot sequence matching exceeded maxStates=" + maxStates);
+                if (++visitedStates > stateLimit) {
+                    throw new IllegalStateException("slot sequence matching exceeded maxStates=" + stateLimit);
                 }
 
                 SequenceState state = queue.removeFirst();

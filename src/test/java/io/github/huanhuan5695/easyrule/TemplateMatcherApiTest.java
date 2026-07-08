@@ -142,6 +142,34 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void matchOptionsCanLimitStatesPerCall() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxStates(100)
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                .build();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> matcher.match("我是中国人", MatchOptions.builder().maxStates(1).build()));
+
+        assertEquals("exact template matching exceeded maxStates=1", exception.getMessage());
+    }
+
+    @Test
+    void matcherLevelMaxStatesCannotBeRaisedPerCall() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxStates(1)
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                .build();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> matcher.match("我是中国人", MatchOptions.builder().maxStates(100).build()));
+
+        assertEquals("exact template matching exceeded maxStates=1", exception.getMessage());
+    }
+
+    @Test
     void matchResultsListIsImmutable() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("people", Arrays.asList("中国人"))

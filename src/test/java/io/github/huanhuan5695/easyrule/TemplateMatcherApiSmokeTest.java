@@ -14,6 +14,7 @@ public class TemplateMatcherApiSmokeTest {
         strictSlotValidationAllowsCompleteDictionaries();
         matchOptionsCanForceSlotSequenceMode();
         matchOptionsCanLimitResultsPerCall();
+        matchOptionsCanLimitStatesPerCall();
         matchResultsListIsImmutable();
         slotSequenceFindsOverlappingValuesAcrossSlots();
 
@@ -149,6 +150,20 @@ public class TemplateMatcherApiSmokeTest {
         assertEquals("first", results.get(0).templateId(), "highest priority survives per-call limit");
     }
 
+    private static void matchOptionsCanLimitStatesPerCall() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxStates(100)
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                .build();
+
+        assertThrows(
+                IllegalStateException.class,
+                "exact template matching exceeded maxStates=1",
+                () -> matcher.match("我是中国人", MatchOptions.builder().maxStates(1).build()),
+                "per-call max states should fail fast");
+    }
+
     private static void matchResultsListIsImmutable() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("people", Arrays.asList("中国人"))
@@ -189,5 +204,26 @@ public class TemplateMatcherApiSmokeTest {
         if (!expected.equals(actual)) {
             throw new AssertionError(message + ": expected " + expected + ", got " + actual);
         }
+    }
+
+    private static void assertThrows(
+            Class<? extends Throwable> expected,
+            String expectedMessage,
+            ThrowingRunnable runnable,
+            String message) {
+        try {
+            runnable.run();
+        } catch (Throwable actual) {
+            if (!expected.isInstance(actual)) {
+                throw new AssertionError(message + ": expected " + expected.getName() + ", got " + actual, actual);
+            }
+            assertEquals(expectedMessage, actual.getMessage(), message + " message");
+            return;
+        }
+        throw new AssertionError(message + ": expected " + expected.getName());
+    }
+
+    private interface ThrowingRunnable {
+        void run();
     }
 }
