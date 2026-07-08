@@ -1,5 +1,8 @@
 package io.github.huanhuan5695.easyrule;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,7 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class TemplateMatcherApiSmokeTest {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         exactModeIsExplicitAndReturnsSlotSpans();
         slotSequenceModeIsExplicitAndOnlyUsedAfterExactMiss();
         explicitSlotSequenceRejectsFixedTextOtherThanUnderscore();
@@ -19,6 +22,7 @@ public class TemplateMatcherApiSmokeTest {
         strictTemplateIdValidationFailsForDuplicateIdsInSameCategory();
         strictTemplateIdValidationAllowsSameIdInDifferentCategories();
         matcherStatsDescribeLoadedConfiguration();
+        builderCanLoadSlotDictionaryFromUtf8File();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderCanRegisterTrieDictionariesInBatches();
         builderBatchRegistrationRejectsNullInputs();
@@ -210,6 +214,30 @@ public class TemplateMatcherApiSmokeTest {
         assertEquals(stats, sameStats, "stats compare by value");
         assertEquals(stats.hashCode(), sameStats.hashCode(), "stats hash code");
         assertTrue(stats.toString().contains("templateCount=2"), "stats string contains counts");
+    }
+
+    private static void builderCanLoadSlotDictionaryFromUtf8File() throws Exception {
+        Path dictionary = Files.createTempFile("easy-rule-people", ".txt");
+        try {
+            Files.write(dictionary, Arrays.asList(
+                    "# comments are ignored",
+                    "中国人",
+                    "",
+                    " 学生 "), StandardCharsets.UTF_8);
+
+            TemplateMatcher matcher = TemplateMatcher.builder()
+                    .strictSlotValidation()
+                    .addSlotDictionaryFile("people", dictionary)
+                    .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                    .build();
+
+            List<TemplateMatcher.MatchResult> results = matcher.match("我是学生");
+
+            assertEquals(1, results.size(), "file dictionary value matches");
+            assertEquals(Arrays.asList("学生"), results.get(0).captures().get("people"), "trimmed file value");
+        } finally {
+            Files.deleteIfExists(dictionary);
+        }
     }
 
     private static void builderCanRegisterDictionariesAndPatternsInBatches() {

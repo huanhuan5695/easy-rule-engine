@@ -386,6 +386,14 @@ addSlotDictionary(String slotName, Collection<String> values)
 
 批量注册会先校验全部输入；如果其中一项非法，本次批量调用不会写入任何字典。
 
+生产环境中也可以从 UTF-8 文本文件加载词典：
+
+```java
+.addSlotDictionaryFile("city", Path.of("dict/city.txt"))
+```
+
+文件中每个非空行是一条词典值；行首去除空白后以 `#` 开头的行会被当作注释忽略。
+
 也可以直接传入已经构建好的 `DoubleArrayTrie`：
 
 ```java

@@ -1,5 +1,9 @@
 package io.github.huanhuan5695.easyrule;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -14,6 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Stream;
 
 /**
  * Immutable template matcher for exact templates and slot-sequence templates.
@@ -354,6 +359,25 @@ public final class TemplateMatcher {
             slotDictionaries.put(slotName, DoubleArrayTrie.build(values));
             slotValues.put(slotName, copyDictionaryValues(values));
             return this;
+        }
+
+        /**
+         * Adds or replaces a slot dictionary from a UTF-8 text file.
+         *
+         * <p>Each non-empty trimmed line is treated as one dictionary value.
+         * Lines whose trimmed content starts with {@code #} are ignored.
+         *
+         * @param slotName slot name used in patterns without brackets
+         * @param path UTF-8 dictionary file path
+         * @return this builder
+         * @throws IOException when the file cannot be read
+         */
+        public Builder addSlotDictionaryFile(String slotName, Path path) throws IOException {
+            validateSlotName(slotName);
+            if (path == null) {
+                throw new IllegalArgumentException("path is required");
+            }
+            return addSlotDictionary(slotName, readDictionaryFile(path));
         }
 
         /**
@@ -716,6 +740,17 @@ public final class TemplateMatcher {
                 }
             }
             return copy;
+        }
+
+        private static List<String> readDictionaryFile(Path path) throws IOException {
+            List<String> values = new ArrayList<>();
+            try (Stream<String> lines = Files.lines(path, StandardCharsets.UTF_8)) {
+                lines.map(String::trim)
+                        .filter(value -> !value.isEmpty())
+                        .filter(value -> !value.startsWith("#"))
+                        .forEach(values::add);
+            }
+            return values;
         }
 
         private void registerReferencedSlots(List<Token> tokens) {

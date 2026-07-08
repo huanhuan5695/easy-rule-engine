@@ -1,5 +1,8 @@
 package io.github.huanhuan5695.easyrule;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -175,6 +178,31 @@ class TemplateMatcherApiTest {
         assertEquals(stats, sameStats);
         assertEquals(stats.hashCode(), sameStats.hashCode());
         assertTrue(stats.toString().contains("templateCount=2"));
+    }
+
+    @Test
+    void builderCanLoadSlotDictionaryFromUtf8File() throws Exception {
+        Path dictionary = Files.createTempFile("easy-rule-people", ".txt");
+        try {
+            Files.write(dictionary, Arrays.asList(
+                    "# comments are ignored",
+                    "中国人",
+                    "",
+                    " 学生 "), StandardCharsets.UTF_8);
+
+            TemplateMatcher matcher = TemplateMatcher.builder()
+                    .strictSlotValidation()
+                    .addSlotDictionaryFile("people", dictionary)
+                    .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                    .build();
+
+            List<TemplateMatcher.MatchResult> results = matcher.match("我是学生");
+
+            assertEquals(1, results.size());
+            assertEquals(Arrays.asList("学生"), results.get(0).captures().get("people"));
+        } finally {
+            Files.deleteIfExists(dictionary);
+        }
     }
 
     @Test
