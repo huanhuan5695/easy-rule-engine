@@ -385,6 +385,8 @@ addSlotDictionary(String slotName, Collection<String> values)
         "song", Arrays.asList("青花瓷", "稻香")))
 ```
 
+批量注册会先校验全部输入；如果其中一项非法，本次批量调用不会写入任何字典。
+
 也可以直接传入已经构建好的 `DoubleArrayTrie`：
 
 ```java
@@ -411,6 +413,8 @@ addPattern(RulePattern pattern)
         RulePattern.exact("travel", "from-city", "我来自[city]"),
         RulePattern.slotSequence("music", "like-sing", "[like]_[sing]")))
 ```
+
+批量注册模板同样是原子操作；如果其中一项非法，本次批量调用不会写入任何模板。
 
 如果多个模板都命中同一段输入，可以给规则设置优先级。数字越大，结果越靠前：
 

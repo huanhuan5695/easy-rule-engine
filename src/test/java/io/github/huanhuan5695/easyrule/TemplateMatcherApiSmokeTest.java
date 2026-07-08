@@ -1,6 +1,7 @@
 package io.github.huanhuan5695.easyrule;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -18,6 +19,8 @@ public class TemplateMatcherApiSmokeTest {
         strictTemplateIdValidationAllowsSameIdInDifferentCategories();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderBatchRegistrationRejectsNullInputs();
+        failedBatchPatternRegistrationDoesNotPartiallyMutateBuilder();
+        failedBatchDictionaryRegistrationDoesNotPartiallyMutateBuilder();
         legacyAddTemplateRejectsNullPatternConsistently();
         duplicateRulePatternsDoNotDuplicateResults();
         matchOptionsCanForceSlotSequenceMode();
@@ -208,6 +211,44 @@ public class TemplateMatcherApiSmokeTest {
                 null,
                 () -> builder.addPatterns(null),
                 "batch patterns should reject null input");
+    }
+
+    private static void failedBatchPatternRegistrationDoesNotPartiallyMutateBuilder() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                "pattern is required",
+                () -> builder.addPatterns(Arrays.asList(
+                        RulePattern.exact("profile", "nationality", "我是[people]"),
+                        null)),
+                "batch pattern failure should reject null pattern");
+
+        assertEquals(0, builder.build().match("我是中国人").size(), "failed pattern batch should be atomic");
+    }
+
+    private static void failedBatchDictionaryRegistrationDoesNotPartiallyMutateBuilder() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder();
+        Map<String, List<String>> dictionaries = new LinkedHashMap<>();
+        dictionaries.put("people", Arrays.asList("中国人"));
+        dictionaries.put("bad", null);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                "values is required",
+                () -> builder.addSlotDictionaries(dictionaries),
+                "batch dictionary failure should reject null values");
+
+        try {
+            builder.strictSlotValidation()
+                    .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+                    .build();
+        } catch (IllegalStateException expected) {
+            assertEquals("missing slot dictionaries: people", expected.getMessage(), "failed dictionary batch atomic");
+            return;
+        }
+        throw new AssertionError("failed dictionary batch should not retain previous entries");
     }
 
     private static void legacyAddTemplateRejectsNullPatternConsistently() {

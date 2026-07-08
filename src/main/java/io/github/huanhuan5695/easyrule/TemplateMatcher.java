@@ -321,6 +321,12 @@ public final class TemplateMatcher {
                 throw new IllegalArgumentException("dictionaries is required");
             }
             for (Map.Entry<String, ? extends Collection<String>> entry : dictionaries.entrySet()) {
+                validateSlotName(entry.getKey());
+                if (entry.getValue() == null) {
+                    throw new IllegalArgumentException("values is required");
+                }
+            }
+            for (Map.Entry<String, ? extends Collection<String>> entry : dictionaries.entrySet()) {
                 addSlotDictionary(entry.getKey(), entry.getValue());
             }
             return this;
@@ -415,6 +421,11 @@ public final class TemplateMatcher {
         public Builder addPatterns(Collection<RulePattern> patterns) {
             if (patterns == null) {
                 throw new IllegalArgumentException("patterns is required");
+            }
+            for (RulePattern pattern : patterns) {
+                if (pattern == null) {
+                    throw new IllegalArgumentException("pattern is required");
+                }
             }
             for (RulePattern pattern : patterns) {
                 addPattern(pattern);
