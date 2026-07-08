@@ -2,38 +2,42 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently a clean scaffold with no source tree committed yet. Keep future code organized by responsibility and avoid implementation files at the root. Recommended layout:
+This repository is a lightweight Java rule matcher. Keep code organized by responsibility and avoid implementation files at the root. Current layout:
 
-- `src/` for application or library source code.
-- `tests/` for unit, integration, and regression tests.
-- `assets/` for static files such as images, fixtures, or sample data.
-- `docs/` for design notes, API references, and contributor documentation.
-- `scripts/` for repeatable local automation.
+- `src/main/java/` for matcher and trie source code.
+- `src/test/java/` for JUnit and smoke tests.
+- `README.md` for user-facing usage and design notes.
+- `pom.xml` for Maven build configuration.
 
-Keep configuration files at the root only when expected by the toolchain, such as `package.json`, `pyproject.toml`, `Cargo.toml`, or `Makefile`.
+Keep future docs in `docs/` and repeatable automation in `scripts/` if those areas are added.
 
 ## Build, Test, and Development Commands
 
-No build system is committed yet. When adding one, document canonical commands here and keep them stable. Prefer a small command surface:
+Use Maven when available:
 
-- `make setup` to install or verify local dependencies.
-- `make test` to run the full test suite.
-- `make lint` to run formatting and static checks.
-- `make dev` to start the local development server or watcher.
+- `mvn test` runs the JUnit test suite.
+- `mvn package` builds the jar.
 
-If the project uses a language-specific tool directly, include examples such as `npm test`, `pytest`, `cargo test`, or `go test ./...`.
+Without Maven, compile and run the smoke tests directly:
+
+```bash
+javac -d /tmp/dat-test src/main/java/DoubleArrayTrie.java src/main/java/PatternMode.java src/main/java/RulePattern.java src/main/java/TemplateMatcher.java src/test/java/DoubleArrayTrieTest.java src/test/java/TemplateMatcherTest.java src/test/java/TemplateMatcherApiSmokeTest.java
+java -cp /tmp/dat-test DoubleArrayTrieTest
+java -cp /tmp/dat-test TemplateMatcherTest
+java -cp /tmp/dat-test TemplateMatcherApiSmokeTest
+```
 
 ## Coding Style & Naming Conventions
 
-Follow the formatter and linter native to the chosen stack. Commit formatter configuration with the first source files so contributors get consistent output. Use descriptive names, keep modules focused, and prefer language conventions: `snake_case` for Python files, `kebab-case` for frontend route or asset files, and `PascalCase` for React components or exported types where applicable.
+Use standard Java style: four-space indentation, `PascalCase` classes, `camelCase` methods and fields, and constants in `UPPER_SNAKE_CASE`. Keep public API objects small and immutable where practical.
 
 ## Testing Guidelines
 
-Add tests with the feature or fix they cover. Place tests under `tests/` or beside source files only if the chosen framework convention favors colocated tests. Use clear names that describe behavior, for example `test_search_returns_ranked_results` or `SearchBox.submits-query.test.tsx`. Include regression tests for bug fixes.
+Add tests with the feature or fix they cover. Prefer JUnit 5 tests under `src/test/java/`; keep no-dependency smoke tests when they help verify behavior without Maven. Test method names should describe behavior, such as `slotSequenceModeIsExplicitAndOnlyUsedAfterExactMiss`.
 
 ## Commit & Pull Request Guidelines
 
-This repository has no commit history yet, so use concise imperative commit messages, such as `Add search indexing module` or `Fix empty query handling`. Keep commits focused.
+Use concise imperative commit messages, such as `Add explicit pattern mode API` or `Fix slot sequence fallback`. Keep commits focused.
 
 Pull requests should include a short summary, validation steps, linked issues when relevant, and screenshots or recordings for UI changes. Note follow-up work explicitly so reviewers can separate intentional scope from omissions.
 
