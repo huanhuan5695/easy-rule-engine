@@ -33,6 +33,7 @@ public final class TemplateMatcher {
 
     private final Node root;
     private final List<SequenceTemplate> sequenceTemplates;
+    private final List<String> sequenceSlotNames;
     private final Map<String, DoubleArrayTrie> slotDictionaries;
     private final SlotScanIndex slotScanIndex;
     private final int maxStates;
@@ -41,12 +42,14 @@ public final class TemplateMatcher {
     private TemplateMatcher(
             Node root,
             List<SequenceTemplate> sequenceTemplates,
+            List<String> sequenceSlotNames,
             Map<String, DoubleArrayTrie> slotDictionaries,
             SlotScanIndex slotScanIndex,
             int maxStates,
             int maxResults) {
         this.root = root;
         this.sequenceTemplates = sequenceTemplates;
+        this.sequenceSlotNames = sequenceSlotNames;
         this.slotDictionaries = slotDictionaries;
         this.slotScanIndex = slotScanIndex;
         this.maxStates = maxStates;
@@ -211,7 +214,7 @@ public final class TemplateMatcher {
 
     private Map<String, List<SlotHit>> collectSlotHits(String input) {
         Map<String, List<SlotHit>> hitsBySlot = slotScanIndex.scan(input);
-        for (String slotName : requiredSequenceSlotNames()) {
+        for (String slotName : sequenceSlotNames) {
             if (slotScanIndex.indexesSlot(slotName)) {
                 continue;
             }
@@ -235,18 +238,6 @@ public final class TemplateMatcher {
             }
         }
         return hitsBySlot;
-    }
-
-    private List<String> requiredSequenceSlotNames() {
-        List<String> slotNames = new ArrayList<>();
-        for (SequenceTemplate template : sequenceTemplates) {
-            for (String slotName : template.slotNames) {
-                if (!slotNames.contains(slotName)) {
-                    slotNames.add(slotName);
-                }
-            }
-        }
-        return slotNames;
     }
 
     private static List<MatchResult> sortAndLimit(List<MatchResult> results, int maxResults) {
@@ -521,11 +512,13 @@ public final class TemplateMatcher {
             if (strictTemplateIdValidation) {
                 validateUniqueTemplateIds();
             }
+            List<String> sequenceSlotNames = requiredSequenceSlotNames(sequenceTemplates);
             return new TemplateMatcher(
                     copyNode(root),
                     new ArrayList<>(sequenceTemplates),
+                    Collections.unmodifiableList(new ArrayList<>(sequenceSlotNames)),
                     new HashMap<>(slotDictionaries),
-                    SlotScanIndex.build(requiredSequenceSlotNames(sequenceTemplates), slotValues),
+                    SlotScanIndex.build(sequenceSlotNames, slotValues),
                     maxStates,
                     maxResults);
         }
