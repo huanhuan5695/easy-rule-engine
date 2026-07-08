@@ -18,6 +18,7 @@ public class TemplateMatcherApiSmokeTest {
         strictTemplateIdValidationAllowsSameIdInDifferentCategories();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderBatchRegistrationRejectsNullInputs();
+        legacyAddTemplateRejectsNullPatternConsistently();
         duplicateRulePatternsDoNotDuplicateResults();
         matchOptionsCanForceSlotSequenceMode();
         matchOptionsCanLimitResultsPerCall();
@@ -207,6 +208,14 @@ public class TemplateMatcherApiSmokeTest {
                 null,
                 () -> builder.addPatterns(null),
                 "batch patterns should reject null input");
+    }
+
+    private static void legacyAddTemplateRejectsNullPatternConsistently() {
+        assertThrows(
+                IllegalArgumentException.class,
+                "pattern is required",
+                () -> TemplateMatcher.builder().addTemplate("profile", "bad", null),
+                "legacy addTemplate should reject null pattern consistently");
     }
 
     private static void duplicateRulePatternsDoNotDuplicateResults() {

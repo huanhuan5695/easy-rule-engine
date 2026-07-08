@@ -169,6 +169,14 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void legacyAddTemplateRejectsNullPatternConsistently() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> TemplateMatcher.builder().addTemplate("profile", "bad", null));
+
+        assertEquals("pattern is required", exception.getMessage());
+    }
+
+    @Test
     void duplicateRulePatternsDoNotDuplicateResults() {
         RulePattern exact = RulePattern.exact("profile", "nationality", "我是[people]");
         RulePattern sequence = RulePattern.slotSequence("music", "like-sing", "[like]_[sing]");

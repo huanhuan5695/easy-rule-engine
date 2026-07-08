@@ -356,7 +356,13 @@ public final class TemplateMatcher {
          * @return this builder
          */
         public Builder addTemplate(String category, String templateId, String pattern) {
-            return addPattern(RulePattern.of(category, templateId, pattern, inferMode(pattern)));
+            RulePattern rulePattern = RulePattern.exact(category, templateId, pattern);
+            return addPattern(RulePattern.of(
+                    rulePattern.category(),
+                    rulePattern.templateId(),
+                    rulePattern.pattern(),
+                    inferMode(rulePattern.pattern()),
+                    rulePattern.priority()));
         }
 
         /**
