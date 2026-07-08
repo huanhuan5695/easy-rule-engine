@@ -21,9 +21,7 @@ public final class RulePattern {
         this.pattern = requireText(pattern, "pattern");
         this.mode = Objects.requireNonNull(mode, "mode");
         this.priority = priority;
-        if (mode == PatternMode.SLOT_SEQUENCE) {
-            validateSlotSequencePattern(pattern);
-        }
+        validatePattern(pattern, mode);
     }
 
     /**
@@ -156,9 +154,10 @@ public final class RulePattern {
         return value;
     }
 
-    private static void validateSlotSequencePattern(String pattern) {
+    private static void validatePattern(String pattern, PatternMode mode) {
         boolean inSlot = false;
         boolean hasSlot = false;
+        int slotStart = -1;
         for (int i = 0; i < pattern.length(); i++) {
             char current = pattern.charAt(i);
             if (current == '[') {
@@ -166,13 +165,15 @@ public final class RulePattern {
                     throw new IllegalArgumentException("nested slot is not allowed: " + pattern);
                 }
                 inSlot = true;
+                slotStart = i + 1;
             } else if (current == ']') {
                 if (!inSlot) {
                     throw new IllegalArgumentException("unopened slot in pattern: " + pattern);
                 }
+                validateSlotName(pattern.substring(slotStart, i));
                 inSlot = false;
                 hasSlot = true;
-            } else if (!inSlot && current != '_') {
+            } else if (!inSlot && mode == PatternMode.SLOT_SEQUENCE && current != '_') {
                 throw new IllegalArgumentException(
                         "slot sequence pattern can only contain slots and '_' separators: " + pattern);
             }
@@ -180,8 +181,21 @@ public final class RulePattern {
         if (inSlot) {
             throw new IllegalArgumentException("unclosed slot in pattern: " + pattern);
         }
-        if (!hasSlot) {
+        if (mode == PatternMode.SLOT_SEQUENCE && !hasSlot) {
             throw new IllegalArgumentException("slot sequence pattern must contain at least one slot");
+        }
+    }
+
+    private static void validateSlotName(String slotName) {
+        if (slotName == null || slotName.isEmpty()) {
+            throw new IllegalArgumentException("slotName is required");
+        }
+        for (int i = 0; i < slotName.length(); i++) {
+            char c = slotName.charAt(i);
+            boolean valid = Character.isLetterOrDigit(c) || c == '_' || c == '-';
+            if (!valid) {
+                throw new IllegalArgumentException("invalid slotName: " + slotName);
+            }
         }
     }
 }

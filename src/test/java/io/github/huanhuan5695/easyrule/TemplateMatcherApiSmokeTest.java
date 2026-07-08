@@ -8,6 +8,7 @@ public class TemplateMatcherApiSmokeTest {
         exactModeIsExplicitAndReturnsSlotSpans();
         slotSequenceModeIsExplicitAndOnlyUsedAfterExactMiss();
         explicitSlotSequenceRejectsFixedTextOtherThanUnderscore();
+        rulePatternValidatesSlotSyntaxAtCreation();
         builtMatcherIsNotChangedByLaterBuilderMutations();
         higherPriorityResultsAreReturnedFirst();
         strictSlotValidationFailsFastForMissingDictionaries();
@@ -67,6 +68,24 @@ public class TemplateMatcherApiSmokeTest {
             return;
         }
         throw new AssertionError("slot sequence should reject fixed text other than underscore");
+    }
+
+    private static void rulePatternValidatesSlotSyntaxAtCreation() {
+        assertThrows(
+                IllegalArgumentException.class,
+                null,
+                () -> RulePattern.exact("bad", "unclosed", "我是[people"),
+                "exact pattern should reject unclosed slots");
+        assertThrows(
+                IllegalArgumentException.class,
+                null,
+                () -> RulePattern.slotSequence("bad", "empty-slot", "[]"),
+                "slot sequence should reject empty slot names");
+        assertThrows(
+                IllegalArgumentException.class,
+                null,
+                () -> RulePattern.slotSequence("bad", "invalid-slot", "[bad slot]"),
+                "slot sequence should reject invalid slot names");
     }
 
     private static void builtMatcherIsNotChangedByLaterBuilderMutations() {
@@ -253,7 +272,9 @@ public class TemplateMatcherApiSmokeTest {
             if (!expected.isInstance(actual)) {
                 throw new AssertionError(message + ": expected " + expected.getName() + ", got " + actual, actual);
             }
-            assertEquals(expectedMessage, actual.getMessage(), message + " message");
+            if (expectedMessage != null) {
+                assertEquals(expectedMessage, actual.getMessage(), message + " message");
+            }
             return;
         }
         throw new AssertionError(message + ": expected " + expected.getName());

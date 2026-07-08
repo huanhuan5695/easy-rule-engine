@@ -56,6 +56,16 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void rulePatternValidatesSlotSyntaxAtCreation() {
+        assertThrows(IllegalArgumentException.class,
+                () -> RulePattern.exact("bad", "unclosed", "我是[people"));
+        assertThrows(IllegalArgumentException.class,
+                () -> RulePattern.slotSequence("bad", "empty-slot", "[]"));
+        assertThrows(IllegalArgumentException.class,
+                () -> RulePattern.slotSequence("bad", "invalid-slot", "[bad slot]"));
+    }
+
+    @Test
     void builtMatcherIsNotChangedByLaterBuilderMutations() {
         TemplateMatcher.Builder builder = TemplateMatcher.builder()
                 .addSlotDictionary("people", Arrays.asList("中国人"))
