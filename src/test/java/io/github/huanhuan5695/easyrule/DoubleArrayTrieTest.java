@@ -7,6 +7,7 @@ public class DoubleArrayTrieTest {
     public static void main(String[] args) {
         DoubleArrayTrie trie = DoubleArrayTrie.build(Arrays.asList("he", "her", "his", "java"));
 
+        assertEquals(4, trie.size(), "reports indexed word count");
         assertTrue(trie.contains("he"), "contains exact word he");
         assertTrue(trie.contains("her"), "contains exact word her");
         assertTrue(trie.contains("java"), "contains exact word java");
@@ -22,6 +23,9 @@ public class DoubleArrayTrieTest {
 
         assertThrows(UnsupportedOperationException.class, () -> prefixes.clear(), "prefix results are immutable");
         assertThrows(IllegalArgumentException.class, () -> DoubleArrayTrie.build(null), "null word collection rejected");
+
+        DoubleArrayTrie compacted = DoubleArrayTrie.build(Arrays.asList("he", "he", "", null, "her"));
+        assertEquals(2, compacted.size(), "counts unique non-empty words");
 
         System.out.println("All DoubleArrayTrie tests passed.");
     }

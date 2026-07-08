@@ -23,12 +23,14 @@ public final class DoubleArrayTrie {
     private final int[] check;
     private final String[] values;
     private final Map<Character, Integer> codes;
+    private final int size;
 
-    private DoubleArrayTrie(int[] base, int[] check, String[] values, Map<Character, Integer> codes) {
+    private DoubleArrayTrie(int[] base, int[] check, String[] values, Map<Character, Integer> codes, int size) {
         this.base = base;
         this.check = check;
         this.values = values;
         this.codes = codes;
+        this.size = size;
     }
 
     /**
@@ -44,6 +46,7 @@ public final class DoubleArrayTrie {
         BuildNode root = new BuildNode();
         Map<Character, Integer> codes = buildCharacterCodes(words);
 
+        int size = 0;
         for (String word : words) {
             if (word == null || word.isEmpty()) {
                 continue;
@@ -53,13 +56,26 @@ public final class DoubleArrayTrie {
                 int code = codes.get(word.charAt(i));
                 node = node.children.computeIfAbsent(code, ignored -> new BuildNode());
             }
-            node.children.computeIfAbsent(TERMINAL, ignored -> new BuildNode()).value = word;
+            BuildNode terminal = node.children.computeIfAbsent(TERMINAL, ignored -> new BuildNode());
+            if (terminal.value == null) {
+                size++;
+            }
+            terminal.value = word;
         }
 
         Builder builder = new Builder(codes);
         builder.check[ROOT] = -1;
         builder.place(root, ROOT);
-        return builder.toTrie();
+        return builder.toTrie(size);
+    }
+
+    /**
+     * Returns the number of unique non-empty words indexed by this trie.
+     *
+     * @return indexed word count
+     */
+    public int size() {
+        return size;
     }
 
     /**
@@ -256,8 +272,8 @@ public final class DoubleArrayTrie {
             values = newValues;
         }
 
-        private DoubleArrayTrie toTrie() {
-            return new DoubleArrayTrie(base, check, values, codes);
+        private DoubleArrayTrie toTrie(int size) {
+            return new DoubleArrayTrie(base, check, values, codes, size);
         }
     }
 }
