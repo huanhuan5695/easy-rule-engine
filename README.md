@@ -469,6 +469,48 @@ Builder 会按添加顺序生成 `auto-1`、`auto-2` 这类内部 ID，并在命
 `templateId()` 中返回。需要跨系统持久化、审计或灰度配置时，仍建议使用显式
 `templateId`。
 
+### 泛化模板有限展开
+
+如果希望一个 pattern 表达有限个固定文本变体，可以使用显式的泛化模板 API：
+
+```java
+TemplateMatcher matcher = TemplateMatcher.builder()
+        .addSlotDictionary("like", Arrays.asList("喜欢"))
+        .addExpandedTemplate("media", "intent", "(我|你)?[like](电影|电视剧)")
+        .build();
+```
+
+上面的模板会在构建期展开为：
+
+```text
+[like]电影
+[like]电视剧
+我[like]电影
+我[like]电视剧
+你[like]电影
+你[like]电视剧
+```
+
+匹配结果仍返回原始 `templateId`，即 `intent`。当前只支持两个泛化语法：
+
+- `(a|b|c)`：固定文本选项。
+- `(a|b|c)?`：整个选项组可有可无。
+
+`[slotName]` 不会按字典值提前展开，仍由匹配阶段从槽位字典中命中。这样可以避免大词典造成模板数量爆炸。普通
+`addTemplate(...)` 不会解释 `()`、`|`、`?`，需要泛化语法时请显式使用
+`addExpandedTemplate(...)`。
+
+生产环境建议限制单条泛化模板的展开数量：
+
+```java
+TemplateMatcher.builder()
+        .maxExpandedPatterns(100)
+        .addExpandedTemplate("media", "intent", "(我|你)?[like](电影|电视剧)");
+```
+
+超过上限会抛出 `IllegalArgumentException`，例如
+`expanded pattern limit exceeded: 120 > 100`。
+
 ### 构建期严格校验
 
 默认情况下，模板引用了不存在的槽位字典时，匹配阶段会返回空结果。生产环境建议开启严格校验，让配置错误在 `build()` 阶段直接暴露：

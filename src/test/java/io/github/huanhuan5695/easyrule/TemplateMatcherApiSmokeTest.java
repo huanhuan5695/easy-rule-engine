@@ -25,6 +25,9 @@ public class TemplateMatcherApiSmokeTest {
         builderCanLoadSlotDictionaryFromUtf8File();
         builderGeneratesTemplateIdsWhenOmitted();
         generatedTemplateIdsSkipExplicitIdsInSameCategory();
+        expandedTemplateMatchesFiniteAlternativesAndKeepsTemplateId();
+        strictTemplateIdValidationTreatsExpandedTemplateAsOneLogicalTemplate();
+        expandedTemplateRejectsConfiguredExpansionLimit();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderCanRegisterTrieDictionariesInBatches();
         builderBatchRegistrationRejectsNullInputs();
@@ -273,6 +276,56 @@ public class TemplateMatcherApiSmokeTest {
         TemplateMatcher.MatchResult result = matcher.match("我是中国人").get(0);
 
         assertEquals("auto-2", result.templateId(), "generated id skips explicit id in same category");
+    }
+
+    private static void expandedTemplateMatchesFiniteAlternativesAndKeepsTemplateId() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addExpandedTemplate("media", "intent", "(我|你)?[like](电影|电视剧)")
+                .build();
+
+        TemplateMatcher.MatchResult optionalPrefix = matcher.match("喜欢电影").get(0);
+        TemplateMatcher.MatchResult firstPrefix = matcher.match("我喜欢电视剧").get(0);
+        TemplateMatcher.MatchResult secondPrefix = matcher.match("你喜欢电影").get(0);
+
+        assertEquals("intent", optionalPrefix.templateId(), "expanded optional prefix keeps template id");
+        assertEquals("intent", firstPrefix.templateId(), "expanded first prefix keeps template id");
+        assertEquals("intent", secondPrefix.templateId(), "expanded second prefix keeps template id");
+        assertEquals("喜欢", firstPrefix.slotCaptures().get("like").get(0).value(), "expanded slot capture value");
+        assertEquals(PatternMode.EXACT, firstPrefix.mode(), "expanded pattern keeps inferred exact mode");
+    }
+
+    private static void strictTemplateIdValidationTreatsExpandedTemplateAsOneLogicalTemplate() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictTemplateIdValidation()
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addExpandedTemplate("media", "intent", "(我|你)[like]电影")
+                .build();
+
+        assertEquals("intent", matcher.match("我喜欢电影").get(0).templateId(), "expanded template builds strictly");
+
+        try {
+            TemplateMatcher.builder()
+                    .strictTemplateIdValidation()
+                    .addSlotDictionary("like", Arrays.asList("喜欢"))
+                    .addExpandedTemplate("media", "intent", "(我|你)[like]电影")
+                    .addTemplate("media", "intent", "他[like]电影")
+                    .build();
+        } catch (IllegalStateException expected) {
+            assertEquals("duplicate template ids: media/intent", expected.getMessage(), "logical duplicate id fails");
+            return;
+        }
+        throw new AssertionError("strict validation should reject duplicate logical template ids");
+    }
+
+    private static void expandedTemplateRejectsConfiguredExpansionLimit() {
+        assertThrows(
+                IllegalArgumentException.class,
+                "expanded pattern limit exceeded: 4 > 3",
+                () -> TemplateMatcher.builder()
+                        .maxExpandedPatterns(3)
+                        .addExpandedTemplate("media", "intent", "(我|你)[like](电影|电视剧)"),
+                "expanded template should enforce max expansion limit");
     }
 
     private static void builderCanRegisterDictionariesAndPatternsInBatches() {

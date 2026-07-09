@@ -241,6 +241,55 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void expandedTemplateMatchesFiniteAlternativesAndKeepsTemplateId() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addExpandedTemplate("media", "intent", "(我|你)?[like](电影|电视剧)")
+                .build();
+
+        TemplateMatcher.MatchResult optionalPrefix = matcher.match("喜欢电影").get(0);
+        TemplateMatcher.MatchResult firstPrefix = matcher.match("我喜欢电视剧").get(0);
+        TemplateMatcher.MatchResult secondPrefix = matcher.match("你喜欢电影").get(0);
+
+        assertEquals("intent", optionalPrefix.templateId());
+        assertEquals("intent", firstPrefix.templateId());
+        assertEquals("intent", secondPrefix.templateId());
+        assertEquals("喜欢", firstPrefix.slotCaptures().get("like").get(0).value());
+        assertEquals(PatternMode.EXACT, firstPrefix.mode());
+    }
+
+    @Test
+    void strictTemplateIdValidationTreatsExpandedTemplateAsOneLogicalTemplate() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictTemplateIdValidation()
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addExpandedTemplate("media", "intent", "(我|你)[like]电影")
+                .build();
+
+        assertEquals("intent", matcher.match("我喜欢电影").get(0).templateId());
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> TemplateMatcher.builder()
+                        .strictTemplateIdValidation()
+                        .addSlotDictionary("like", Arrays.asList("喜欢"))
+                        .addExpandedTemplate("media", "intent", "(我|你)[like]电影")
+                        .addTemplate("media", "intent", "他[like]电影")
+                        .build());
+
+        assertEquals("duplicate template ids: media/intent", exception.getMessage());
+    }
+
+    @Test
+    void expandedTemplateRejectsConfiguredExpansionLimit() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> TemplateMatcher.builder()
+                        .maxExpandedPatterns(3)
+                        .addExpandedTemplate("media", "intent", "(我|你)[like](电影|电视剧)"));
+
+        assertEquals("expanded pattern limit exceeded: 4 > 3", exception.getMessage());
+    }
+
+    @Test
     void builderCanRegisterDictionariesAndPatternsInBatches() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .strictSlotValidation()

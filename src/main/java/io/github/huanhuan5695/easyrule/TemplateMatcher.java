@@ -31,6 +31,7 @@ import java.util.stream.Stream;
 public final class TemplateMatcher {
     private static final int DEFAULT_MAX_STATES = 10_000;
     private static final int DEFAULT_MAX_RESULTS = 100;
+    private static final int DEFAULT_MAX_EXPANDED_PATTERNS = 512;
     private static final String GENERATED_TEMPLATE_ID_PREFIX = "auto-";
     private static final String GENERATED_TEMPLATE_ID_VALIDATION_VALUE = GENERATED_TEMPLATE_ID_PREFIX + "validation";
     private static final Comparator<MatchResult> RESULT_ORDER =
@@ -332,11 +333,15 @@ public final class TemplateMatcher {
         private final Node root = new Node();
         private final List<SequenceTemplate> sequenceTemplates = new ArrayList<>();
         private final Set<RulePattern> patterns = new HashSet<>();
+        private final Set<RulePattern> expandedLogicalPatterns = new HashSet<>();
+        private final Set<String> logicalTemplateIds = new HashSet<>();
+        private final Set<String> duplicateTemplateIds = new TreeSet<>();
         private final Set<String> referencedSlotNames = new TreeSet<>();
         private final Map<String, DoubleArrayTrie> slotDictionaries = new HashMap<>();
         private final Map<String, List<String>> slotValues = new HashMap<>();
         private int maxStates = DEFAULT_MAX_STATES;
         private int maxResults = DEFAULT_MAX_RESULTS;
+        private int maxExpandedPatterns = DEFAULT_MAX_EXPANDED_PATTERNS;
         private int nextGeneratedTemplateId = 1;
         private boolean strictSlotValidation;
         private boolean strictTemplateIdValidation;
@@ -485,6 +490,39 @@ public final class TemplateMatcher {
         }
 
         /**
+         * Adds a generalized template after finite compile-time expansion.
+         *
+         * <p>The supported generalized syntax is intentionally small:
+         * {@code (a|b)} for alternatives and {@code (a|b)?} for an optional
+         * alternative group. Slot references such as {@code [like]} are
+         * preserved and are not expanded from their dictionaries.
+         *
+         * @param category result category
+         * @param templateId result template id
+         * @param pattern generalized pattern text
+         * @return this builder
+         */
+        public Builder addExpandedTemplate(String category, String templateId, String pattern) {
+            RulePattern logicalPattern = RulePattern.exact(category, templateId, pattern);
+            return addExpandedTemplate(logicalPattern, PatternExpander.expand(pattern, maxExpandedPatterns));
+        }
+
+        /**
+         * Adds a generalized template with an internally generated template id.
+         *
+         * @param category result category
+         * @param pattern generalized pattern text
+         * @return this builder
+         */
+        public Builder addExpandedTemplate(String category, String pattern) {
+            RulePattern logicalPattern = RulePattern.exact(category, GENERATED_TEMPLATE_ID_VALIDATION_VALUE, pattern);
+            List<String> expandedPatterns = PatternExpander.expand(pattern, maxExpandedPatterns);
+            return addExpandedTemplate(
+                    RulePattern.exact(category, nextGeneratedTemplateId(category), logicalPattern.pattern()),
+                    expandedPatterns);
+        }
+
+        /**
          * Adds a rule pattern with explicit mode and priority.
          *
          * @param pattern rule pattern
@@ -497,6 +535,31 @@ public final class TemplateMatcher {
             if (!patterns.add(pattern)) {
                 return this;
             }
+            registerLogicalTemplateId(pattern.category(), pattern.templateId());
+            addPatternToIndexes(pattern);
+            return this;
+        }
+
+        private Builder addExpandedTemplate(RulePattern logicalPattern, List<String> expandedPatterns) {
+            if (!expandedLogicalPatterns.add(logicalPattern)) {
+                return this;
+            }
+            registerLogicalTemplateId(logicalPattern.category(), logicalPattern.templateId());
+            for (String expandedPattern : expandedPatterns) {
+                RulePattern compiledPattern = RulePattern.of(
+                        logicalPattern.category(),
+                        logicalPattern.templateId(),
+                        expandedPattern,
+                        inferMode(expandedPattern),
+                        logicalPattern.priority());
+                if (patterns.add(compiledPattern)) {
+                    addPatternToIndexes(compiledPattern);
+                }
+            }
+            return this;
+        }
+
+        private void addPatternToIndexes(RulePattern pattern) {
             List<Token> tokens = parsePattern(pattern.pattern());
             registerReferencedSlots(tokens);
             if (pattern.mode() == PatternMode.SLOT_SEQUENCE) {
@@ -510,7 +573,7 @@ public final class TemplateMatcher {
                         pattern.templateId(),
                         pattern.priority(),
                         slotNames(tokens)));
-                return this;
+                return;
             }
 
             Node node = root;
@@ -522,7 +585,6 @@ public final class TemplateMatcher {
                 }
             }
             node.outputs.add(new TemplateMeta(pattern.category(), pattern.templateId(), pattern.priority()));
-            return this;
         }
 
         /**
@@ -623,6 +685,20 @@ public final class TemplateMatcher {
         }
 
         /**
+         * Sets the maximum number of templates produced by one generalized pattern.
+         *
+         * @param maxExpandedPatterns positive expansion limit
+         * @return this builder
+         */
+        public Builder maxExpandedPatterns(int maxExpandedPatterns) {
+            if (maxExpandedPatterns <= 0) {
+                throw new IllegalArgumentException("maxExpandedPatterns must be positive");
+            }
+            this.maxExpandedPatterns = maxExpandedPatterns;
+            return this;
+        }
+
+        /**
          * Builds an immutable matcher snapshot.
          *
          * @return immutable matcher
@@ -682,16 +758,16 @@ public final class TemplateMatcher {
         }
 
         private void validateUniqueTemplateIds() {
-            Set<String> seen = new HashSet<>();
-            Set<String> duplicates = new TreeSet<>();
-            for (RulePattern pattern : patterns) {
-                String key = pattern.category() + "/" + pattern.templateId();
-                if (!seen.add(key)) {
-                    duplicates.add(key);
-                }
+            if (!duplicateTemplateIds.isEmpty()) {
+                throw new IllegalStateException(
+                        "duplicate template ids: " + String.join(", ", duplicateTemplateIds));
             }
-            if (!duplicates.isEmpty()) {
-                throw new IllegalStateException("duplicate template ids: " + String.join(", ", duplicates));
+        }
+
+        private void registerLogicalTemplateId(String category, String templateId) {
+            String key = templateIdKey(category, templateId);
+            if (!logicalTemplateIds.add(key)) {
+                duplicateTemplateIds.add(key);
             }
         }
 
@@ -705,12 +781,11 @@ public final class TemplateMatcher {
         }
 
         private boolean containsTemplateId(String category, String templateId) {
-            for (RulePattern pattern : patterns) {
-                if (pattern.category().equals(category) && pattern.templateId().equals(templateId)) {
-                    return true;
-                }
-            }
-            return false;
+            return logicalTemplateIds.contains(templateIdKey(category, templateId));
+        }
+
+        private static String templateIdKey(String category, String templateId) {
+            return category + "/" + templateId;
         }
 
         private static List<Token> parsePattern(String pattern) {

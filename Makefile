@@ -7,6 +7,7 @@ MAIN_SOURCES = \
 	src/main/java/io/github/huanhuan5695/easyrule/MatchMode.java \
 	src/main/java/io/github/huanhuan5695/easyrule/MatchOptions.java \
 	src/main/java/io/github/huanhuan5695/easyrule/PatternMode.java \
+	src/main/java/io/github/huanhuan5695/easyrule/PatternExpander.java \
 	src/main/java/io/github/huanhuan5695/easyrule/RulePattern.java \
 	src/main/java/io/github/huanhuan5695/easyrule/TemplateMatcher.java
 
