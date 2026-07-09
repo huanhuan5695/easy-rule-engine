@@ -23,6 +23,8 @@ public class TemplateMatcherApiSmokeTest {
         strictTemplateIdValidationAllowsSameIdInDifferentCategories();
         matcherStatsDescribeLoadedConfiguration();
         builderCanLoadSlotDictionaryFromUtf8File();
+        builderGeneratesTemplateIdsWhenOmitted();
+        generatedTemplateIdsSkipExplicitIdsInSameCategory();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderCanRegisterTrieDictionariesInBatches();
         builderBatchRegistrationRejectsNullInputs();
@@ -238,6 +240,39 @@ public class TemplateMatcherApiSmokeTest {
         } finally {
             Files.deleteIfExists(dictionary);
         }
+    }
+
+    private static void builderGeneratesTemplateIdsWhenOmitted() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addTemplate("profile", "我是[people]")
+                .addTemplate("music", "[like]_[sing]")
+                .build();
+
+        TemplateMatcher.MatchResult exact = matcher.match("我是中国人").get(0);
+        TemplateMatcher.MatchResult sequence = matcher.match(
+                "我喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).get(0);
+
+        assertEquals("auto-1", exact.templateId(), "first omitted template id is generated");
+        assertEquals(PatternMode.EXACT, exact.mode(), "generated exact template keeps inferred mode");
+        assertEquals("auto-2", sequence.templateId(), "second omitted template id is generated");
+        assertEquals(PatternMode.SLOT_SEQUENCE, sequence.mode(), "generated slot sequence template keeps inferred mode");
+    }
+
+    private static void generatedTemplateIdsSkipExplicitIdsInSameCategory() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictTemplateIdValidation()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addTemplate("profile", "auto-1", "他是[people]")
+                .addTemplate("profile", "我是[people]")
+                .build();
+
+        TemplateMatcher.MatchResult result = matcher.match("我是中国人").get(0);
+
+        assertEquals("auto-2", result.templateId(), "generated id skips explicit id in same category");
     }
 
     private static void builderCanRegisterDictionariesAndPatternsInBatches() {

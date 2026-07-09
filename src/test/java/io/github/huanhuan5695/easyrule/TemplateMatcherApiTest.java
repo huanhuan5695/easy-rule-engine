@@ -206,6 +206,41 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void builderGeneratesTemplateIdsWhenOmitted() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addTemplate("profile", "我是[people]")
+                .addTemplate("music", "[like]_[sing]")
+                .build();
+
+        TemplateMatcher.MatchResult exact = matcher.match("我是中国人").get(0);
+        TemplateMatcher.MatchResult sequence = matcher.match(
+                "我喜欢唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).get(0);
+
+        assertEquals("auto-1", exact.templateId());
+        assertEquals(PatternMode.EXACT, exact.mode());
+        assertEquals("auto-2", sequence.templateId());
+        assertEquals(PatternMode.SLOT_SEQUENCE, sequence.mode());
+    }
+
+    @Test
+    void generatedTemplateIdsSkipExplicitIdsInSameCategory() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .strictTemplateIdValidation()
+                .addSlotDictionary("people", Arrays.asList("中国人"))
+                .addTemplate("profile", "auto-1", "他是[people]")
+                .addTemplate("profile", "我是[people]")
+                .build();
+
+        TemplateMatcher.MatchResult result = matcher.match("我是中国人").get(0);
+
+        assertEquals("auto-2", result.templateId());
+    }
+
+    @Test
     void builderCanRegisterDictionariesAndPatternsInBatches() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .strictSlotValidation()

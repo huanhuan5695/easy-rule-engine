@@ -456,6 +456,19 @@ addTemplate(String category, String templateId, String pattern)
 
 该方法会根据 pattern 形态自动推断模式。
 
+如果调用方不想自己维护模板 ID，也可以省略 `templateId`：
+
+```java
+TemplateMatcher matcher = TemplateMatcher.builder()
+        .addSlotDictionary("city", Arrays.asList("北京", "上海"))
+        .addTemplate("travel", "我来自[city]")
+        .build();
+```
+
+Builder 会按添加顺序生成 `auto-1`、`auto-2` 这类内部 ID，并在命中结果的
+`templateId()` 中返回。需要跨系统持久化、审计或灰度配置时，仍建议使用显式
+`templateId`。
+
 ### 构建期严格校验
 
 默认情况下，模板引用了不存在的槽位字典时，匹配阶段会返回空结果。生产环境建议开启严格校验，让配置错误在 `build()` 阶段直接暴露：

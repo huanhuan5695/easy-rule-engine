@@ -31,6 +31,8 @@ import java.util.stream.Stream;
 public final class TemplateMatcher {
     private static final int DEFAULT_MAX_STATES = 10_000;
     private static final int DEFAULT_MAX_RESULTS = 100;
+    private static final String GENERATED_TEMPLATE_ID_PREFIX = "auto-";
+    private static final String GENERATED_TEMPLATE_ID_VALIDATION_VALUE = GENERATED_TEMPLATE_ID_PREFIX + "validation";
     private static final Comparator<MatchResult> RESULT_ORDER =
             Comparator.comparingInt(MatchResult::priority).reversed()
                     .thenComparing(Comparator.comparingInt(MatchResult::capturedTextLength).reversed())
@@ -335,6 +337,7 @@ public final class TemplateMatcher {
         private final Map<String, List<String>> slotValues = new HashMap<>();
         private int maxStates = DEFAULT_MAX_STATES;
         private int maxResults = DEFAULT_MAX_RESULTS;
+        private int nextGeneratedTemplateId = 1;
         private boolean strictSlotValidation;
         private boolean strictTemplateIdValidation;
 
@@ -463,6 +466,22 @@ public final class TemplateMatcher {
                     rulePattern.pattern(),
                     inferMode(rulePattern.pattern()),
                     rulePattern.priority()));
+        }
+
+        /**
+         * Adds a template and uses an internally generated template id.
+         *
+         * <p>Generated ids use the {@code auto-N} format and are assigned in
+         * builder insertion order. Existing explicit ids in the same category
+         * are skipped so strict template-id validation remains safe.
+         *
+         * @param category result category
+         * @param pattern pattern text
+         * @return this builder
+         */
+        public Builder addTemplate(String category, String pattern) {
+            RulePattern.exact(category, GENERATED_TEMPLATE_ID_VALIDATION_VALUE, pattern);
+            return addTemplate(category, nextGeneratedTemplateId(category), pattern);
         }
 
         /**
@@ -674,6 +693,24 @@ public final class TemplateMatcher {
             if (!duplicates.isEmpty()) {
                 throw new IllegalStateException("duplicate template ids: " + String.join(", ", duplicates));
             }
+        }
+
+        private String nextGeneratedTemplateId(String category) {
+            String templateId;
+            do {
+                templateId = GENERATED_TEMPLATE_ID_PREFIX + nextGeneratedTemplateId;
+                nextGeneratedTemplateId++;
+            } while (containsTemplateId(category, templateId));
+            return templateId;
+        }
+
+        private boolean containsTemplateId(String category, String templateId) {
+            for (RulePattern pattern : patterns) {
+                if (pattern.category().equals(category) && pattern.templateId().equals(templateId)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static List<Token> parsePattern(String pattern) {
