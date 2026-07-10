@@ -14,6 +14,7 @@ Example output:
 
 ```text
 exact: iterations=50000, totalMs=..., avgMicros=..., opsPerSecond=..., resultCount=...
+match-first: iterations=50000, totalMs=..., avgMicros=..., opsPerSecond=..., resultCount=...
 slot-sequence: iterations=50000, totalMs=..., avgMicros=..., opsPerSecond=..., resultCount=...
 ```
 
@@ -37,7 +38,11 @@ The benchmark builds:
 It measures:
 
 - Exact template matching for a fully anchored input.
+- Best-result matching through `matchFirst` and the Top-K collector.
 - Slot-sequence matching with `MatchMode.SLOT_SEQUENCE_ONLY`.
+
+Matching enforces independent limits for input length, visited states, collected slot hits, and returned
+results. Keep these limits unchanged when comparing commits so measurements describe the same workload.
 
 ## Future Work
 

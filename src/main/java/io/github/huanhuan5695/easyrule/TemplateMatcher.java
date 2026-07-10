@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
@@ -31,6 +32,8 @@ import java.util.stream.Stream;
 public final class TemplateMatcher {
     private static final int DEFAULT_MAX_STATES = 10_000;
     private static final int DEFAULT_MAX_RESULTS = 100;
+    private static final int DEFAULT_MAX_INPUT_LENGTH = 100_000;
+    private static final int DEFAULT_MAX_SLOT_HITS = 100_000;
     private static final int DEFAULT_MAX_EXPANDED_PATTERNS = 512;
     private static final String GENERATED_TEMPLATE_ID_PREFIX = "auto-";
     private static final String GENERATED_TEMPLATE_ID_VALIDATION_VALUE = GENERATED_TEMPLATE_ID_PREFIX + "validation";
@@ -47,6 +50,8 @@ public final class TemplateMatcher {
     private final SlotScanIndex slotScanIndex;
     private final int maxStates;
     private final int maxResults;
+    private final int maxInputLength;
+    private final int maxSlotHits;
     private final Stats stats;
 
     private TemplateMatcher(
@@ -57,6 +62,8 @@ public final class TemplateMatcher {
             SlotScanIndex slotScanIndex,
             int maxStates,
             int maxResults,
+            int maxInputLength,
+            int maxSlotHits,
             Stats stats) {
         this.root = root;
         this.sequenceTemplates = sequenceTemplates;
@@ -65,6 +72,8 @@ public final class TemplateMatcher {
         this.slotScanIndex = slotScanIndex;
         this.maxStates = maxStates;
         this.maxResults = maxResults;
+        this.maxInputLength = maxInputLength;
+        this.maxSlotHits = maxSlotHits;
         this.stats = stats;
     }
 
@@ -142,24 +151,26 @@ public final class TemplateMatcher {
             return Collections.emptyList();
         }
         MatchOptions effectiveOptions = options == null ? MatchOptions.defaultOptions() : options;
-        int effectiveMaxResults = effectiveOptions.maxResults() == null
-                ? maxResults
-                : Math.min(maxResults, effectiveOptions.maxResults());
-        int effectiveMaxStates = effectiveOptions.maxStates() == null
-                ? maxStates
-                : Math.min(maxStates, effectiveOptions.maxStates());
+        int effectiveMaxResults = effectiveLimit(effectiveOptions.maxResults(), maxResults);
+        int effectiveMaxStates = effectiveLimit(effectiveOptions.maxStates(), maxStates);
+        int effectiveMaxInputLength = effectiveLimit(effectiveOptions.maxInputLength(), maxInputLength);
+        int effectiveMaxSlotHits = effectiveLimit(effectiveOptions.maxSlotHits(), maxSlotHits);
+        if (input.length() > effectiveMaxInputLength) {
+            throw new MatchLimitExceededException(
+                    "input validation", "maxInputLength", effectiveMaxInputLength);
+        }
         StateBudget stateBudget = new StateBudget(effectiveMaxStates);
 
         if (effectiveOptions.mode() == MatchMode.EXACT_ONLY) {
             return matchExactTemplates(input, effectiveMaxResults, stateBudget);
         }
         if (effectiveOptions.mode() == MatchMode.SLOT_SEQUENCE_ONLY) {
-            return matchSlotSequences(input, effectiveMaxResults, stateBudget);
+            return matchSlotSequences(input, effectiveMaxResults, effectiveMaxSlotHits, stateBudget);
         }
         if (effectiveOptions.mode() == MatchMode.ALL) {
             List<MatchResult> results = new ArrayList<>();
-            results.addAll(matchExactTemplates(input, maxResults, stateBudget));
-            results.addAll(matchSlotSequences(input, maxResults, stateBudget));
+            results.addAll(matchExactTemplates(input, effectiveMaxResults, stateBudget));
+            results.addAll(matchSlotSequences(input, effectiveMaxResults, effectiveMaxSlotHits, stateBudget));
             return sortAndLimit(results, effectiveMaxResults);
         }
 
@@ -167,7 +178,11 @@ public final class TemplateMatcher {
         if (!exactResults.isEmpty()) {
             return exactResults;
         }
-        return matchSlotSequences(input, effectiveMaxResults, stateBudget);
+        return matchSlotSequences(input, effectiveMaxResults, effectiveMaxSlotHits, stateBudget);
+    }
+
+    private static int effectiveLimit(Integer perCallLimit, int matcherLimit) {
+        return perCallLimit == null ? matcherLimit : Math.min(matcherLimit, perCallLimit);
     }
 
     private static MatchOptions singleResultOptions(MatchOptions options) {
@@ -178,13 +193,19 @@ public final class TemplateMatcher {
         if (effectiveOptions.maxStates() != null) {
             builder.maxStates(effectiveOptions.maxStates());
         }
+        if (effectiveOptions.maxInputLength() != null) {
+            builder.maxInputLength(effectiveOptions.maxInputLength());
+        }
+        if (effectiveOptions.maxSlotHits() != null) {
+            builder.maxSlotHits(effectiveOptions.maxSlotHits());
+        }
         return builder.build();
     }
 
     private List<MatchResult> matchExactTemplates(String input, int resultLimit, StateBudget stateBudget) {
-        List<MatchResult> results = new ArrayList<>();
+        ResultCollector results = new ResultCollector(resultLimit);
         ArrayDeque<MatchState> queue = new ArrayDeque<>();
-        queue.add(new MatchState(root, 0, new LinkedHashMap<String, List<SlotCapture>>()));
+        queue.add(new MatchState(root, 0, null));
 
         while (!queue.isEmpty()) {
             stateBudget.visit("exact template matching");
@@ -230,16 +251,20 @@ public final class TemplateMatcher {
             }
         }
 
-        return sortAndLimit(results, resultLimit);
+        return results.toList();
     }
 
-    private List<MatchResult> matchSlotSequences(String input, int resultLimit, StateBudget stateBudget) {
-        List<MatchResult> results = new ArrayList<>();
-        Map<String, List<SlotHit>> hitsBySlot = collectSlotHits(input);
+    private List<MatchResult> matchSlotSequences(
+            String input,
+            int resultLimit,
+            int slotHitLimit,
+            StateBudget stateBudget) {
+        ResultCollector results = new ResultCollector(resultLimit);
+        Map<String, List<SlotHit>> hitsBySlot = collectSlotHits(input, slotHitLimit);
 
         for (SequenceTemplate template : sequenceTemplates) {
             ArrayDeque<SequenceState> queue = new ArrayDeque<>();
-            queue.add(new SequenceState(0, 0, new LinkedHashMap<String, List<SlotCapture>>()));
+            queue.add(new SequenceState(0, 0, null));
 
             while (!queue.isEmpty()) {
                 stateBudget.visit("slot sequence matching");
@@ -272,11 +297,12 @@ public final class TemplateMatcher {
             }
         }
 
-        return sortAndLimit(results, resultLimit);
+        return results.toList();
     }
 
-    private Map<String, List<SlotHit>> collectSlotHits(String input) {
-        Map<String, List<SlotHit>> hitsBySlot = slotScanIndex.scan(input);
+    private Map<String, List<SlotHit>> collectSlotHits(String input, int slotHitLimit) {
+        HitBudget hitBudget = new HitBudget(slotHitLimit);
+        Map<String, List<SlotHit>> hitsBySlot = slotScanIndex.scan(input, hitBudget);
         for (String slotName : sequenceSlotNames) {
             if (slotScanIndex.indexesSlot(slotName)) {
                 continue;
@@ -292,6 +318,7 @@ public final class TemplateMatcher {
                 candidates.sort(Comparator.comparingInt(String::length).reversed());
                 for (String candidate : candidates) {
                     if (!candidate.isEmpty()) {
+                        hitBudget.record();
                         hits.add(new SlotHit(candidate, pos, pos + candidate.length()));
                     }
                 }
@@ -311,19 +338,13 @@ public final class TemplateMatcher {
         return Collections.unmodifiableList(new ArrayList<>(results));
     }
 
-    private static Map<String, List<SlotCapture>> appendCapture(
-            Map<String, List<SlotCapture>> captures,
+    private static CaptureTrace appendCapture(
+            CaptureTrace captures,
             String slotName,
             String value,
             int start,
             int end) {
-        Map<String, List<SlotCapture>> copy = new LinkedHashMap<>();
-        for (Map.Entry<String, List<SlotCapture>> entry : captures.entrySet()) {
-            copy.put(entry.getKey(), new ArrayList<>(entry.getValue()));
-        }
-        copy.computeIfAbsent(slotName, ignored -> new ArrayList<>())
-                .add(new SlotCapture(slotName, value, start, end));
-        return copy;
+        return new CaptureTrace(captures, new SlotCapture(slotName, value, start, end));
     }
 
     /**
@@ -341,6 +362,8 @@ public final class TemplateMatcher {
         private final Map<String, List<String>> slotValues = new HashMap<>();
         private int maxStates = DEFAULT_MAX_STATES;
         private int maxResults = DEFAULT_MAX_RESULTS;
+        private int maxInputLength = DEFAULT_MAX_INPUT_LENGTH;
+        private int maxSlotHits = DEFAULT_MAX_SLOT_HITS;
         private int maxExpandedPatterns = DEFAULT_MAX_EXPANDED_PATTERNS;
         private int nextGeneratedTemplateId = 1;
         private boolean strictSlotValidation;
@@ -685,6 +708,34 @@ public final class TemplateMatcher {
         }
 
         /**
+         * Sets the maximum accepted UTF-16 input length for one match call.
+         *
+         * @param maxInputLength positive maximum {@link String#length()} value
+         * @return this builder
+         */
+        public Builder maxInputLength(int maxInputLength) {
+            if (maxInputLength <= 0) {
+                throw new IllegalArgumentException("maxInputLength must be positive");
+            }
+            this.maxInputLength = maxInputLength;
+            return this;
+        }
+
+        /**
+         * Sets the maximum dictionary hits collected during one slot-sequence scan.
+         *
+         * @param maxSlotHits positive slot-hit limit
+         * @return this builder
+         */
+        public Builder maxSlotHits(int maxSlotHits) {
+            if (maxSlotHits <= 0) {
+                throw new IllegalArgumentException("maxSlotHits must be positive");
+            }
+            this.maxSlotHits = maxSlotHits;
+            return this;
+        }
+
+        /**
          * Sets the maximum number of templates produced by one generalized pattern.
          *
          * @param maxExpandedPatterns positive expansion limit
@@ -719,6 +770,8 @@ public final class TemplateMatcher {
                     SlotScanIndex.build(sequenceSlotNames, slotValues),
                     maxStates,
                     maxResults,
+                    maxInputLength,
+                    maxSlotHits,
                     new Stats(
                             countExactTemplates(root),
                             sequenceTemplates.size(),
@@ -1022,19 +1075,21 @@ public final class TemplateMatcher {
         private final PatternMode mode;
         private final Map<String, List<SlotCapture>> slotCaptures;
         private final Map<String, List<String>> captures;
+        private final int capturedTextLength;
 
         private MatchResult(
                 String category,
                 String templateId,
                 int priority,
                 PatternMode mode,
-                Map<String, List<SlotCapture>> slotCaptures) {
+                CaptureTrace captureTrace) {
             this.category = category;
             this.templateId = templateId;
             this.priority = priority;
             this.mode = mode;
-            this.slotCaptures = freezeSlotCaptures(slotCaptures);
+            this.slotCaptures = freezeSlotCaptures(captureTrace);
             this.captures = freezeValues(this.slotCaptures);
+            this.capturedTextLength = captureTrace == null ? 0 : captureTrace.capturedTextLength;
         }
 
         /**
@@ -1123,11 +1178,17 @@ public final class TemplateMatcher {
                     + '}';
         }
 
-        private static Map<String, List<SlotCapture>> freezeSlotCaptures(
-                Map<String, List<SlotCapture>> captures) {
+        private static Map<String, List<SlotCapture>> freezeSlotCaptures(CaptureTrace trace) {
+            ArrayDeque<SlotCapture> orderedCaptures = new ArrayDeque<>();
+            for (CaptureTrace current = trace; current != null; current = current.previous) {
+                orderedCaptures.addFirst(current.capture);
+            }
             Map<String, List<SlotCapture>> frozen = new LinkedHashMap<>();
-            for (Map.Entry<String, List<SlotCapture>> entry : captures.entrySet()) {
-                frozen.put(entry.getKey(), Collections.unmodifiableList(new ArrayList<>(entry.getValue())));
+            for (SlotCapture capture : orderedCaptures) {
+                frozen.computeIfAbsent(capture.slotName(), ignored -> new ArrayList<>()).add(capture);
+            }
+            for (Map.Entry<String, List<SlotCapture>> entry : frozen.entrySet()) {
+                entry.setValue(Collections.unmodifiableList(entry.getValue()));
             }
             return Collections.unmodifiableMap(frozen);
         }
@@ -1145,13 +1206,7 @@ public final class TemplateMatcher {
         }
 
         private int capturedTextLength() {
-            int length = 0;
-            for (List<SlotCapture> captures : slotCaptures.values()) {
-                for (SlotCapture capture : captures) {
-                    length += capture.end() - capture.start();
-                }
-            }
-            return length;
+            return capturedTextLength;
         }
     }
 
@@ -1241,6 +1296,54 @@ public final class TemplateMatcher {
         }
     }
 
+    /**
+     * Signals that a configured match resource limit was exceeded.
+     */
+    public static final class MatchLimitExceededException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+
+        /** Matching phase that reached the configured limit. */
+        private final String phase;
+        /** Name of the configured limit. */
+        private final String limitName;
+        /** Effective limit value for the failed call. */
+        private final int limit;
+
+        private MatchLimitExceededException(String phase, String limitName, int limit) {
+            super(phase + " exceeded " + limitName + "=" + limit);
+            this.phase = phase;
+            this.limitName = limitName;
+            this.limit = limit;
+        }
+
+        /**
+         * Returns the matching phase that exceeded its limit.
+         *
+         * @return phase name
+         */
+        public String phase() {
+            return phase;
+        }
+
+        /**
+         * Returns the configured limit name.
+         *
+         * @return limit name
+         */
+        public String limitName() {
+            return limitName;
+        }
+
+        /**
+         * Returns the configured limit value.
+         *
+         * @return limit value
+         */
+        public int limit() {
+            return limit;
+        }
+    }
+
     private static final class Node {
         private final Map<Character, Node> charChildren = new HashMap<>();
         private final List<SlotEdge> slotEdges = new ArrayList<>();
@@ -1317,7 +1420,7 @@ public final class TemplateMatcher {
             return indexedSlotNames.contains(slotName);
         }
 
-        private Map<String, List<SlotHit>> scan(String input) {
+        private Map<String, List<SlotHit>> scan(String input, HitBudget hitBudget) {
             Map<String, List<SlotHit>> hitsBySlot = new HashMap<>();
             ScanNode node = root;
             for (int i = 0; i < input.length(); i++) {
@@ -1330,6 +1433,7 @@ public final class TemplateMatcher {
                     node = next;
                 }
                 for (SlotOutput output : node.outputs) {
+                    hitBudget.record();
                     int start = i + 1 - output.value.length();
                     hitsBySlot.computeIfAbsent(output.slotName, ignored -> new ArrayList<>())
                             .add(new SlotHit(output.value, start, i + 1));
@@ -1409,17 +1513,74 @@ public final class TemplateMatcher {
 
         private void visit(String phase) {
             if (++visited > limit) {
-                throw new IllegalStateException(phase + " exceeded maxStates=" + limit);
+                throw new MatchLimitExceededException(phase, "maxStates", limit);
             }
+        }
+    }
+
+    private static final class HitBudget {
+        private final int limit;
+        private int hits;
+
+        private HitBudget(int limit) {
+            this.limit = limit;
+        }
+
+        private void record() {
+            if (++hits > limit) {
+                throw new MatchLimitExceededException(
+                        "slot sequence scanning", "maxSlotHits", limit);
+            }
+        }
+    }
+
+    private static final class ResultCollector {
+        private final int limit;
+        private final PriorityQueue<MatchResult> worstFirst;
+
+        private ResultCollector(int limit) {
+            this.limit = limit;
+            this.worstFirst = new PriorityQueue<>(limit, RESULT_ORDER.reversed());
+        }
+
+        private void add(MatchResult result) {
+            if (worstFirst.size() < limit) {
+                worstFirst.add(result);
+                return;
+            }
+            MatchResult worst = worstFirst.peek();
+            if (RESULT_ORDER.compare(result, worst) < 0) {
+                worstFirst.remove();
+                worstFirst.add(result);
+            }
+        }
+
+        private List<MatchResult> toList() {
+            List<MatchResult> results = new ArrayList<>(worstFirst);
+            results.sort(RESULT_ORDER);
+            return Collections.unmodifiableList(results);
+        }
+    }
+
+    private static final class CaptureTrace {
+        private final CaptureTrace previous;
+        private final SlotCapture capture;
+        private final int capturedTextLength;
+
+        private CaptureTrace(CaptureTrace previous, SlotCapture capture) {
+            this.previous = previous;
+            this.capture = capture;
+            this.capturedTextLength = (previous == null ? 0 : previous.capturedTextLength)
+                    + capture.end() - capture.start();
         }
     }
 
     private static final class MatchState {
         private final Node node;
         private final int inputPos;
-        private final Map<String, List<SlotCapture>> captures;
+        private final CaptureTrace captures;
 
-        private MatchState(Node node, int inputPos, Map<String, List<SlotCapture>> captures) {
+        private MatchState(Node node, int inputPos, CaptureTrace captures) {
             this.node = node;
             this.inputPos = inputPos;
             this.captures = captures;
@@ -1429,9 +1590,9 @@ public final class TemplateMatcher {
     private static final class SequenceState {
         private final int slotIndex;
         private final int searchPos;
-        private final Map<String, List<SlotCapture>> captures;
+        private final CaptureTrace captures;
 
-        private SequenceState(int slotIndex, int searchPos, Map<String, List<SlotCapture>> captures) {
+        private SequenceState(int slotIndex, int searchPos, CaptureTrace captures) {
             this.slotIndex = slotIndex;
             this.searchPos = searchPos;
             this.captures = captures;

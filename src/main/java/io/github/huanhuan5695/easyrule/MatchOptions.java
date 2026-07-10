@@ -11,11 +11,20 @@ public final class MatchOptions {
     private final MatchMode mode;
     private final Integer maxResults;
     private final Integer maxStates;
+    private final Integer maxInputLength;
+    private final Integer maxSlotHits;
 
-    private MatchOptions(MatchMode mode, Integer maxResults, Integer maxStates) {
+    private MatchOptions(
+            MatchMode mode,
+            Integer maxResults,
+            Integer maxStates,
+            Integer maxInputLength,
+            Integer maxSlotHits) {
         this.mode = Objects.requireNonNull(mode, "mode");
         this.maxResults = maxResults;
         this.maxStates = maxStates;
+        this.maxInputLength = maxInputLength;
+        this.maxSlotHits = maxSlotHits;
     }
 
     /**
@@ -64,6 +73,24 @@ public final class MatchOptions {
         return maxStates;
     }
 
+    /**
+     * Returns the per-call UTF-16 input length limit, or {@code null} to use the matcher-level limit.
+     *
+     * @return maximum input length or {@code null}
+     */
+    public Integer maxInputLength() {
+        return maxInputLength;
+    }
+
+    /**
+     * Returns the per-call slot-hit limit, or {@code null} to use the matcher-level limit.
+     *
+     * @return maximum slot hits or {@code null}
+     */
+    public Integer maxSlotHits() {
+        return maxSlotHits;
+    }
+
     @Override
     public boolean equals(Object other) {
         if (this == other) {
@@ -75,12 +102,14 @@ public final class MatchOptions {
         MatchOptions that = (MatchOptions) other;
         return mode == that.mode
                 && Objects.equals(maxResults, that.maxResults)
-                && Objects.equals(maxStates, that.maxStates);
+                && Objects.equals(maxStates, that.maxStates)
+                && Objects.equals(maxInputLength, that.maxInputLength)
+                && Objects.equals(maxSlotHits, that.maxSlotHits);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mode, maxResults, maxStates);
+        return Objects.hash(mode, maxResults, maxStates, maxInputLength, maxSlotHits);
     }
 
     @Override
@@ -89,6 +118,8 @@ public final class MatchOptions {
                 + "mode=" + mode
                 + ", maxResults=" + maxResults
                 + ", maxStates=" + maxStates
+                + ", maxInputLength=" + maxInputLength
+                + ", maxSlotHits=" + maxSlotHits
                 + '}';
     }
 
@@ -99,6 +130,8 @@ public final class MatchOptions {
         private MatchMode mode = MatchMode.EXACT_THEN_SLOT_SEQUENCE;
         private Integer maxResults;
         private Integer maxStates;
+        private Integer maxInputLength;
+        private Integer maxSlotHits;
 
         private Builder() {
         }
@@ -145,12 +178,44 @@ public final class MatchOptions {
         }
 
         /**
+         * Sets a positive per-call UTF-16 input length limit.
+         *
+         * <p>This can lower, but not raise, the matcher-level input limit.
+         *
+         * @param maxInputLength maximum {@link String#length()} value
+         * @return this builder
+         */
+        public Builder maxInputLength(int maxInputLength) {
+            if (maxInputLength <= 0) {
+                throw new IllegalArgumentException("maxInputLength must be positive");
+            }
+            this.maxInputLength = maxInputLength;
+            return this;
+        }
+
+        /**
+         * Sets a positive per-call limit for dictionary hits collected during slot-sequence scanning.
+         *
+         * <p>This can lower, but not raise, the matcher-level slot-hit limit.
+         *
+         * @param maxSlotHits maximum number of collected slot hits
+         * @return this builder
+         */
+        public Builder maxSlotHits(int maxSlotHits) {
+            if (maxSlotHits <= 0) {
+                throw new IllegalArgumentException("maxSlotHits must be positive");
+            }
+            this.maxSlotHits = maxSlotHits;
+            return this;
+        }
+
+        /**
          * Builds immutable match options.
          *
          * @return match options
          */
         public MatchOptions build() {
-            return new MatchOptions(mode, maxResults, maxStates);
+            return new MatchOptions(mode, maxResults, maxStates, maxInputLength, maxSlotHits);
         }
     }
 }

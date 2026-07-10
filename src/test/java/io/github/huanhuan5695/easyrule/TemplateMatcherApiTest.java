@@ -290,6 +290,19 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void expandedTemplateStopsAsSoonAsIntermediateLimitIsExceeded() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> TemplateMatcher.builder()
+                        .maxExpandedPatterns(8)
+                        .addExpandedTemplate(
+                                "stress",
+                                "bounded",
+                                "(a|b)(c|d)(e|f)(g|h)(i|j)(k|l)(m|n)(o|p)(q|r)(s|t)"));
+
+        assertEquals("expanded pattern limit exceeded: 9 > 8", exception.getMessage());
+    }
+
+    @Test
     void builderCanRegisterDictionariesAndPatternsInBatches() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .strictSlotValidation()
@@ -452,6 +465,48 @@ class TemplateMatcherApiTest {
                 () -> matcher.match("我是中国人", MatchOptions.builder().maxStates(1).build()));
 
         assertEquals("exact template matching exceeded maxStates=1", exception.getMessage());
+    }
+
+    @Test
+    void matcherRejectsInputOverConfiguredLengthLimit() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxInputLength(4)
+                .addTemplate("text", "short", "测试")
+                .build();
+
+        TemplateMatcher.MatchLimitExceededException exception = assertThrows(
+                TemplateMatcher.MatchLimitExceededException.class,
+                () -> matcher.match("12345"));
+
+        assertEquals("input validation exceeded maxInputLength=4", exception.getMessage());
+        assertEquals("input validation", exception.phase());
+        assertEquals("maxInputLength", exception.limitName());
+        assertEquals(4, exception.limit());
+    }
+
+    @Test
+    void matchOptionsCanTightenInputAndSlotHitLimits() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxInputLength(100)
+                .maxSlotHits(100)
+                .addSlotDictionary("token", Arrays.asList("a", "aa"))
+                .addPattern(RulePattern.slotSequence("stress", "dense", "[token]"))
+                .build();
+
+        MatchOptions strictInput = MatchOptions.builder().maxInputLength(3).build();
+        TemplateMatcher.MatchLimitExceededException inputException = assertThrows(
+                TemplateMatcher.MatchLimitExceededException.class,
+                () -> matcher.match("aaaa", strictInput));
+        assertEquals("input validation exceeded maxInputLength=3", inputException.getMessage());
+
+        MatchOptions strictHits = MatchOptions.builder()
+                .mode(MatchMode.SLOT_SEQUENCE_ONLY)
+                .maxSlotHits(3)
+                .build();
+        TemplateMatcher.MatchLimitExceededException hitException = assertThrows(
+                TemplateMatcher.MatchLimitExceededException.class,
+                () -> matcher.match("aaaa", strictHits));
+        assertEquals("slot sequence scanning exceeded maxSlotHits=3", hitException.getMessage());
     }
 
     @Test

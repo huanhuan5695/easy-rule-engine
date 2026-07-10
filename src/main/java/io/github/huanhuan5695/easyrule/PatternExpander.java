@@ -17,28 +17,24 @@ final class PatternExpander {
             throw new IllegalArgumentException("maxExpandedPatterns must be positive");
         }
 
-        List<List<String>> segments = parseSegments(pattern);
+        List<List<String>> segments = parseSegments(pattern, maxExpandedPatterns);
         List<String> results = new ArrayList<>();
         results.add("");
         for (List<String> alternatives : segments) {
-            List<String> next = new ArrayList<>();
+            Set<String> next = new LinkedHashSet<>();
             for (String prefix : results) {
                 for (String alternative : alternatives) {
-                    next.add(prefix + alternative);
+                    if (next.add(prefix + alternative) && next.size() > maxExpandedPatterns) {
+                        throw limitExceeded(next.size(), maxExpandedPatterns);
+                    }
                 }
             }
-            results = next;
+            results = new ArrayList<>(next);
         }
-
-        Set<String> unique = new LinkedHashSet<>(results);
-        if (unique.size() > maxExpandedPatterns) {
-            throw new IllegalArgumentException(
-                    "expanded pattern limit exceeded: " + unique.size() + " > " + maxExpandedPatterns);
-        }
-        return new ArrayList<>(unique);
+        return results;
     }
 
-    private static List<List<String>> parseSegments(String pattern) {
+    private static List<List<String>> parseSegments(String pattern, int maxExpandedPatterns) {
         List<List<String>> segments = new ArrayList<>();
         StringBuilder literal = new StringBuilder();
         for (int i = 0; i < pattern.length();) {
@@ -53,12 +49,16 @@ final class PatternExpander {
             } else if (current == '(') {
                 flushLiteral(segments, literal);
                 int end = findGroupEnd(pattern, i);
-                List<String> alternatives = splitAlternatives(pattern.substring(i + 1, end), pattern);
+                List<String> alternatives = splitAlternatives(
+                        pattern.substring(i + 1, end), pattern, maxExpandedPatterns);
                 int next = end + 1;
                 if (next < pattern.length() && pattern.charAt(next) == '?') {
                     List<String> optional = new ArrayList<>();
                     optional.add("");
                     optional.addAll(alternatives);
+                    if (optional.size() > maxExpandedPatterns) {
+                        throw limitExceeded(optional.size(), maxExpandedPatterns);
+                    }
                     alternatives = optional;
                     next++;
                 }
@@ -103,8 +103,11 @@ final class PatternExpander {
         throw new IllegalArgumentException("unclosed group in pattern: " + pattern);
     }
 
-    private static List<String> splitAlternatives(String group, String pattern) {
-        List<String> alternatives = new ArrayList<>();
+    private static List<String> splitAlternatives(
+            String group,
+            String pattern,
+            int maxExpandedPatterns) {
+        Set<String> alternatives = new LinkedHashSet<>();
         StringBuilder current = new StringBuilder();
         for (int i = 0; i < group.length();) {
             char c = group.charAt(i);
@@ -116,22 +119,33 @@ final class PatternExpander {
                 current.append(group, i, end + 1);
                 i = end + 1;
             } else if (c == '|') {
-                addAlternative(alternatives, current, pattern);
+                addAlternative(alternatives, current, pattern, maxExpandedPatterns);
                 i++;
             } else {
                 current.append(c);
                 i++;
             }
         }
-        addAlternative(alternatives, current, pattern);
-        return alternatives;
+        addAlternative(alternatives, current, pattern, maxExpandedPatterns);
+        return new ArrayList<>(alternatives);
     }
 
-    private static void addAlternative(List<String> alternatives, StringBuilder current, String pattern) {
+    private static void addAlternative(
+            Set<String> alternatives,
+            StringBuilder current,
+            String pattern,
+            int maxExpandedPatterns) {
         if (current.length() == 0) {
             throw new IllegalArgumentException("empty alternative is not allowed: " + pattern);
         }
-        alternatives.add(current.toString());
+        if (alternatives.add(current.toString()) && alternatives.size() > maxExpandedPatterns) {
+            throw limitExceeded(alternatives.size(), maxExpandedPatterns);
+        }
         current.setLength(0);
+    }
+
+    private static IllegalArgumentException limitExceeded(int observed, int limit) {
+        return new IllegalArgumentException(
+                "expanded pattern limit exceeded: " + observed + " > " + limit);
     }
 }

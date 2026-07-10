@@ -28,6 +28,7 @@ public class TemplateMatcherApiSmokeTest {
         expandedTemplateMatchesFiniteAlternativesAndKeepsTemplateId();
         strictTemplateIdValidationTreatsExpandedTemplateAsOneLogicalTemplate();
         expandedTemplateRejectsConfiguredExpansionLimit();
+        expandedTemplateStopsAsSoonAsIntermediateLimitIsExceeded();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderCanRegisterTrieDictionariesInBatches();
         builderBatchRegistrationRejectsNullInputs();
@@ -39,6 +40,8 @@ public class TemplateMatcherApiSmokeTest {
         matchOptionsCanForceSlotSequenceMode();
         matchOptionsCanLimitResultsPerCall();
         matchOptionsCanLimitStatesPerCall();
+        matcherRejectsInputOverConfiguredLengthLimit();
+        matchOptionsCanTightenInputAndSlotHitLimits();
         allModeSharesStateBudgetAcrossMatchingPhases();
         matchFirstReturnsHighestOrderedResult();
         matchFirstHonorsOptionsAndReturnsEmptyWhenMissing();
@@ -328,6 +331,19 @@ public class TemplateMatcherApiSmokeTest {
                 "expanded template should enforce max expansion limit");
     }
 
+    private static void expandedTemplateStopsAsSoonAsIntermediateLimitIsExceeded() {
+        assertThrows(
+                IllegalArgumentException.class,
+                "expanded pattern limit exceeded: 9 > 8",
+                () -> TemplateMatcher.builder()
+                        .maxExpandedPatterns(8)
+                        .addExpandedTemplate(
+                                "stress",
+                                "bounded",
+                                "(a|b)(c|d)(e|f)(g|h)(i|j)(k|l)(m|n)(o|p)(q|r)(s|t)"),
+                "expanded template should stop at the first over-limit result");
+    }
+
     private static void builderCanRegisterDictionariesAndPatternsInBatches() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .strictSlotValidation()
@@ -529,6 +545,45 @@ public class TemplateMatcherApiSmokeTest {
                 "exact template matching exceeded maxStates=1",
                 () -> matcher.match("我是中国人", MatchOptions.builder().maxStates(1).build()),
                 "per-call max states should fail fast");
+    }
+
+    private static void matcherRejectsInputOverConfiguredLengthLimit() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxInputLength(4)
+                .addTemplate("text", "short", "测试")
+                .build();
+
+        assertThrows(
+                TemplateMatcher.MatchLimitExceededException.class,
+                "input validation exceeded maxInputLength=4",
+                () -> matcher.match("12345"),
+                "matcher should reject oversized input");
+    }
+
+    private static void matchOptionsCanTightenInputAndSlotHitLimits() {
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .maxInputLength(100)
+                .maxSlotHits(100)
+                .addSlotDictionary("token", Arrays.asList("a", "aa"))
+                .addPattern(RulePattern.slotSequence("stress", "dense", "[token]"))
+                .build();
+
+        assertThrows(
+                TemplateMatcher.MatchLimitExceededException.class,
+                "input validation exceeded maxInputLength=3",
+                () -> matcher.match("aaaa", MatchOptions.builder().maxInputLength(3).build()),
+                "per-call input limit should tighten matcher limit");
+
+        assertThrows(
+                TemplateMatcher.MatchLimitExceededException.class,
+                "slot sequence scanning exceeded maxSlotHits=3",
+                () -> matcher.match(
+                        "aaaa",
+                        MatchOptions.builder()
+                                .mode(MatchMode.SLOT_SEQUENCE_ONLY)
+                                .maxSlotHits(3)
+                                .build()),
+                "per-call slot hit limit should tighten matcher limit");
     }
 
     private static void allModeSharesStateBudgetAcrossMatchingPhases() {

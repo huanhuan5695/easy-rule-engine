@@ -351,6 +351,8 @@ like -> sing
 ```text
 maxStates = 10000
 maxResults = 100
+maxInputLength = 100000
+maxSlotHits = 100000
 ```
 
 可以在构建时调整：
@@ -359,8 +361,15 @@ maxResults = 100
 TemplateMatcher matcher = TemplateMatcher.builder()
         .maxStates(5000)
         .maxResults(20)
+        .maxInputLength(2000)
+        .maxSlotHits(10000)
         .build();
 ```
+
+`maxInputLength` 使用 Java `String.length()` 的 UTF-16 长度。`maxSlotHits`
+限制槽位序列扫描阶段收集的词典命中总数，避免超长输入或高重叠词典在状态匹配前占用过多内存。
+匹配结果在计算过程中只保留排序后的 Top-K，内部槽位状态使用共享链式结构，因此较小的
+`maxResults` 也会直接约束结果集合的内存占用。
 
 ## API 说明
 
@@ -508,8 +517,8 @@ TemplateMatcher.builder()
         .addExpandedTemplate("media", "intent", "(我|你)?[like](电影|电视剧)");
 ```
 
-超过上限会抛出 `IllegalArgumentException`，例如
-`expanded pattern limit exceeded: 120 > 100`。
+展开器会在任意中间阶段首次超过上限时立即停止，不会先生成完整笛卡尔积。超过上限会抛出
+`IllegalArgumentException`，例如 `expanded pattern limit exceeded: 101 > 100`。
 
 ### 构建期严格校验
 
@@ -584,7 +593,22 @@ best.ifPresent(result -> {
 - `SLOT_SEQUENCE_ONLY`：只执行槽位序列匹配。
 - `ALL`：同时返回严格模板和槽位序列结果，再统一排序和裁剪。
 
-`maxResults` 和 `maxStates` 的单次调用配置只能收紧 matcher 构建时的全局限制，不能绕过全局限制。`maxStates` 是整个 `match()` 调用共享的状态预算；即使 `ALL` 模式同时执行严格模板和槽位序列匹配，也不会重新计数。服务化接入时可以按请求类型设置更小的 `maxStates`，避免复杂输入占用过多计算。
+`maxResults`、`maxStates`、`maxInputLength` 和 `maxSlotHits` 的单次调用配置只能收紧 matcher
+构建时的全局限制，不能绕过全局限制。例如：
+
+```java
+MatchOptions options = MatchOptions.builder()
+        .maxResults(5)
+        .maxStates(2000)
+        .maxInputLength(1000)
+        .maxSlotHits(5000)
+        .build();
+```
+
+`maxStates` 是整个 `match()` 调用共享的状态预算；即使 `ALL` 模式同时执行严格模板和槽位序列匹配，
+也不会重新计数。运行时超过输入、槽位命中或状态限制时，会抛出
+`TemplateMatcher.MatchLimitExceededException`。调用方可以通过 `phase()`、`limitName()` 和
+`limit()` 区分限流原因，统一转换为业务侧的参数错误或降级结果。
 
 `MatchResult` 提供：
 

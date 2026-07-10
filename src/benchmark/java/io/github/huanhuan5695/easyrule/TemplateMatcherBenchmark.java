@@ -20,12 +20,16 @@ public final class TemplateMatcherBenchmark {
 
         runWarmup(matcher, exactInput, sequenceInput);
 
-        BenchmarkResult exact = measure("exact", () -> matcher.match(exactInput));
+        BenchmarkResult exact = measure("exact", () -> matcher.match(exactInput).size());
+        BenchmarkResult first = measure(
+                "match-first",
+                () -> matcher.matchFirst(exactInput).isPresent() ? 1 : 0);
         BenchmarkResult sequence = measure(
                 "slot-sequence",
-                () -> matcher.match(sequenceInput, sequenceOnly));
+                () -> matcher.match(sequenceInput, sequenceOnly).size());
 
         System.out.println(exact);
+        System.out.println(first);
         System.out.println(sequence);
     }
 
@@ -62,7 +66,7 @@ public final class TemplateMatcherBenchmark {
         long start = System.nanoTime();
         int resultCount = 0;
         for (int i = 0; i < MEASURE_ITERATIONS; i++) {
-            resultCount += operation.run().size();
+            resultCount += operation.run();
         }
         long elapsedNanos = System.nanoTime() - start;
         return new BenchmarkResult(name, MEASURE_ITERATIONS, elapsedNanos, resultCount);
@@ -86,7 +90,7 @@ public final class TemplateMatcherBenchmark {
     }
 
     private interface BenchmarkOperation {
-        List<TemplateMatcher.MatchResult> run();
+        int run();
     }
 
     private static final class BenchmarkResult {
