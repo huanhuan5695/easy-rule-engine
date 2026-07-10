@@ -1,6 +1,7 @@
 import io.github.huanhuan5695.easyrule.MatchMode;
 import io.github.huanhuan5695.easyrule.MatchOptions;
 import io.github.huanhuan5695.easyrule.PatternMode;
+import io.github.huanhuan5695.easyrule.PatternSyntax;
 import io.github.huanhuan5695.easyrule.RulePattern;
 import io.github.huanhuan5695.easyrule.TemplateMatcher;
 
@@ -34,6 +35,25 @@ public class QuickStart {
 
         System.out.println("exact: " + exact.category() + "/" + exact.templateId() + " " + exact.captures());
         System.out.println("sequence: " + sequence.category() + "/" + sequence.templateId() + " " + sequence.captures());
+
+        PatternSyntax customSyntax = PatternSyntax.builder()
+                .slot("${", "}")
+                .group("{", "}")
+                .alternative("/")
+                .optional("~")
+                .sequenceSeparator("+")
+                .build();
+        TemplateMatcher customMatcher = TemplateMatcher.builder()
+                .patternSyntax(customSyntax)
+                .addSlotDictionary("people", Arrays.asList("中国人", "学生"))
+                .addExpandedTemplate("profile", "custom-identity", "{我/你}~是${people}")
+                .build();
+
+        TemplateMatcher.MatchResult custom = first(customMatcher.match("你是学生"));
+        require("custom-identity".equals(custom.templateId()), "expected custom syntax template id");
+        require("学生".equals(custom.captures().get("people").get(0)), "expected custom syntax capture");
+        System.out.println("custom syntax: " + custom.category() + "/" + custom.templateId()
+                + " " + custom.captures());
     }
 
     private static TemplateMatcher.MatchResult first(List<TemplateMatcher.MatchResult> results) {

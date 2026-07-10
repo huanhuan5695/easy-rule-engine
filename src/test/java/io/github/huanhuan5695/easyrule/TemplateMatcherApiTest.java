@@ -59,17 +59,21 @@ class TemplateMatcherApiTest {
     @Test
     void explicitSlotSequenceRejectsFixedTextOtherThanUnderscore() {
         assertThrows(IllegalArgumentException.class,
-                () -> RulePattern.slotSequence("bad", "bad-pattern", "[like]-[sing]"));
+                () -> TemplateMatcher.builder()
+                        .addPattern(RulePattern.slotSequence("bad", "bad-pattern", "[like]-[sing]")));
     }
 
     @Test
-    void rulePatternValidatesSlotSyntaxAtCreation() {
+    void builderValidatesPatternsWithItsConfiguredSyntax() {
         assertThrows(IllegalArgumentException.class,
-                () -> RulePattern.exact("bad", "unclosed", "我是[people"));
+                () -> TemplateMatcher.builder()
+                        .addPattern(RulePattern.exact("bad", "unclosed", "我是[people")));
         assertThrows(IllegalArgumentException.class,
-                () -> RulePattern.slotSequence("bad", "empty-slot", "[]"));
+                () -> TemplateMatcher.builder()
+                        .addPattern(RulePattern.slotSequence("bad", "empty-slot", "[]")));
         assertThrows(IllegalArgumentException.class,
-                () -> RulePattern.slotSequence("bad", "invalid-slot", "[bad slot]"));
+                () -> TemplateMatcher.builder()
+                        .addPattern(RulePattern.slotSequence("bad", "invalid-slot", "[bad slot]")));
     }
 
     @Test
@@ -303,6 +307,106 @@ class TemplateMatcherApiTest {
     }
 
     @Test
+    void customSyntaxSupportsExactSequenceAndExpandedPatterns() {
+        PatternSyntax syntax = PatternSyntax.builder()
+                .slot("${", "}")
+                .group("{", "}")
+                .alternative("/")
+                .optional("~")
+                .sequenceSeparator("+")
+                .escape("\\")
+                .build();
+
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .patternSyntax(syntax)
+                .strictSlotValidation()
+                .addSlotDictionary("people", Arrays.asList("中国人", "学生"))
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addTemplate("profile", "identity", "我是${people}")
+                .addPattern(RulePattern.slotSequence("music", "like-sing", "${like}+${sing}"))
+                .addExpandedTemplate("media", "media-like", "{我/你}~${like}{电影/电视剧}")
+                .build();
+
+        assertEquals("identity", matcher.match("我是中国人").get(0).templateId());
+        assertEquals("like-sing", matcher.match(
+                "他喜欢大声唱歌",
+                MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build()).get(0).templateId());
+        assertEquals("media-like", matcher.match("喜欢电影").get(0).templateId());
+        assertEquals("media-like", matcher.match("你喜欢电视剧").get(0).templateId());
+    }
+
+    @Test
+    void customSyntaxSupportsMultiCharacterTokensAndEscapedLiterals() {
+        PatternSyntax syntax = PatternSyntax.builder()
+                .slot("{{", "}}")
+                .group("<<", ">>")
+                .alternative("||")
+                .optional("??")
+                .sequenceSeparator("::")
+                .escape("\\")
+                .build();
+
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .patternSyntax(syntax)
+                .addSlotDictionary("value", Arrays.asList("内容"))
+                .addExpandedTemplate(
+                        "custom",
+                        "escaped",
+                        "\\<<字面量\\>>{{value}}<<甲||乙>>??")
+                .build();
+
+        assertEquals("escaped", matcher.match("<<字面量>>内容").get(0).templateId());
+        assertEquals("escaped", matcher.match("<<字面量>>内容乙").get(0).templateId());
+    }
+
+    @Test
+    void patternSyntaxRejectsConflictingTokensAndLateConfiguration() {
+        IllegalArgumentException conflict = assertThrows(
+                IllegalArgumentException.class,
+                () -> PatternSyntax.builder()
+                        .slot("<", ">")
+                        .group("<<", ")")
+                        .build());
+        assertTrue(conflict.getMessage().contains("pattern syntax tokens conflict"));
+
+        TemplateMatcher.Builder builder = TemplateMatcher.builder()
+                .addTemplate("profile", "identity", "我是[people]");
+        IllegalStateException lateConfiguration = assertThrows(
+                IllegalStateException.class,
+                () -> builder.patternSyntax(PatternSyntax.builder().slot("${", "}").build()));
+        assertEquals(
+                "patternSyntax must be configured before adding templates",
+                lateConfiguration.getMessage());
+    }
+
+    @Test
+    void customSyntaxRejectsMalformedGroupsAndDanglingEscapes() {
+        PatternSyntax syntax = PatternSyntax.builder()
+                .slot("${", "}")
+                .group("{", "}")
+                .alternative("/")
+                .optional("~")
+                .build();
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TemplateMatcher.builder()
+                        .patternSyntax(syntax)
+                        .addExpandedTemplate("bad", "nested", "{我/{你/他}}"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TemplateMatcher.builder()
+                        .patternSyntax(syntax)
+                        .addExpandedTemplate("bad", "empty", "{我//你}"));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TemplateMatcher.builder()
+                        .patternSyntax(syntax)
+                        .addTemplate("bad", "escape", "我是\\"));
+    }
+
+    @Test
     void builderCanRegisterDictionariesAndPatternsInBatches() {
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .strictSlotValidation()
@@ -355,6 +459,18 @@ class TemplateMatcherApiTest {
         assertThrows(IllegalArgumentException.class, () -> builder.addPatterns(Arrays.asList(
                 RulePattern.exact("profile", "nationality", "我是[people]"),
                 null)));
+
+        assertTrue(builder.build().match("我是中国人").isEmpty());
+    }
+
+    @Test
+    void malformedPatternBatchDoesNotPartiallyMutateBuilder() {
+        TemplateMatcher.Builder builder = TemplateMatcher.builder()
+                .addSlotDictionary("people", Arrays.asList("中国人"));
+
+        assertThrows(IllegalArgumentException.class, () -> builder.addPatterns(Arrays.asList(
+                RulePattern.exact("profile", "valid", "我是[people]"),
+                RulePattern.exact("profile", "invalid", "他是[people"))));
 
         assertTrue(builder.build().match("我是中国人").isEmpty());
     }
@@ -606,6 +722,12 @@ class TemplateMatcherApiTest {
         assertEquals(firstOptions, secondOptions);
         assertEquals(firstOptions.hashCode(), secondOptions.hashCode());
         assertTrue(firstOptions.toString().contains("ALL"));
+
+        PatternSyntax defaultSyntax = PatternSyntax.defaultSyntax();
+        PatternSyntax equivalentSyntax = PatternSyntax.builder().build();
+        assertEquals(defaultSyntax, equivalentSyntax);
+        assertEquals(defaultSyntax.hashCode(), equivalentSyntax.hashCode());
+        assertTrue(defaultSyntax.toString().contains("sequenceSeparator='_'"));
 
         TemplateMatcher matcher = TemplateMatcher.builder()
                 .addSlotDictionary("people", Arrays.asList("中国人"))

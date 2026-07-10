@@ -366,10 +366,32 @@ public final class TemplateMatcher {
         private int maxSlotHits = DEFAULT_MAX_SLOT_HITS;
         private int maxExpandedPatterns = DEFAULT_MAX_EXPANDED_PATTERNS;
         private int nextGeneratedTemplateId = 1;
+        private PatternSyntax patternSyntax = PatternSyntax.defaultSyntax();
         private boolean strictSlotValidation;
         private boolean strictTemplateIdValidation;
 
         private Builder() {
+        }
+
+        /**
+         * Configures the syntax used by every subsequently registered pattern.
+         *
+         * <p>The syntax must be configured before the first template is added.
+         * Slot dictionaries may be registered before or after this call.
+         *
+         * @param patternSyntax immutable pattern syntax
+         * @return this builder
+         */
+        public Builder patternSyntax(PatternSyntax patternSyntax) {
+            if (patternSyntax == null) {
+                throw new IllegalArgumentException("patternSyntax is required");
+            }
+            if (!patterns.isEmpty() || !expandedLogicalPatterns.isEmpty()) {
+                throw new IllegalStateException(
+                        "patternSyntax must be configured before adding templates");
+            }
+            this.patternSyntax = patternSyntax;
+            return this;
         }
 
         /**
@@ -378,7 +400,7 @@ public final class TemplateMatcher {
          * <p>Values are indexed for exact-template matching and for the shared
          * slot-sequence scan index.
          *
-         * @param slotName slot name used in patterns without brackets
+         * @param slotName slot name used in patterns without syntax delimiters
          * @param values dictionary values; null and empty entries are ignored
          * @return this builder
          */
@@ -398,7 +420,7 @@ public final class TemplateMatcher {
          * <p>Each non-empty trimmed line is treated as one dictionary value.
          * Lines whose trimmed content starts with {@code #} are ignored.
          *
-         * @param slotName slot name used in patterns without brackets
+         * @param slotName slot name used in patterns without syntax delimiters
          * @param path UTF-8 dictionary file path
          * @return this builder
          * @throws IOException when the file cannot be read
@@ -439,7 +461,7 @@ public final class TemplateMatcher {
          * <p>Trie words are reused by the shared slot-sequence scan index, so
          * prebuilt dictionaries keep the same scan path as raw value dictionaries.
          *
-         * @param slotName slot name used in patterns without brackets
+         * @param slotName slot name used in patterns without syntax delimiters
          * @param trie immutable dictionary trie
          * @return this builder
          */
@@ -488,12 +510,13 @@ public final class TemplateMatcher {
          */
         public Builder addTemplate(String category, String templateId, String pattern) {
             RulePattern rulePattern = RulePattern.exact(category, templateId, pattern);
+            PatternAst.Sequence parsedPattern = PatternParser.parse(rulePattern.pattern(), patternSyntax);
             return addPattern(RulePattern.of(
                     rulePattern.category(),
                     rulePattern.templateId(),
                     rulePattern.pattern(),
-                    inferMode(rulePattern.pattern()),
-                    rulePattern.priority()));
+                    inferMode(parsedPattern),
+                    rulePattern.priority()), parsedPattern);
         }
 
         /**
@@ -508,17 +531,24 @@ public final class TemplateMatcher {
          * @return this builder
          */
         public Builder addTemplate(String category, String pattern) {
-            RulePattern.exact(category, GENERATED_TEMPLATE_ID_VALIDATION_VALUE, pattern);
-            return addTemplate(category, nextGeneratedTemplateId(category), pattern);
+            RulePattern validationPattern = RulePattern.exact(
+                    category, GENERATED_TEMPLATE_ID_VALIDATION_VALUE, pattern);
+            PatternAst.Sequence parsedPattern = PatternParser.parse(validationPattern.pattern(), patternSyntax);
+            RulePattern generatedPattern = RulePattern.of(
+                    category,
+                    nextGeneratedTemplateId(category),
+                    validationPattern.pattern(),
+                    inferMode(parsedPattern),
+                    validationPattern.priority());
+            return addPattern(generatedPattern, parsedPattern);
         }
 
         /**
          * Adds a generalized template after finite compile-time expansion.
          *
-         * <p>The supported generalized syntax is intentionally small:
-         * {@code (a|b)} for alternatives and {@code (a|b)?} for an optional
-         * alternative group. Slot references such as {@code [like]} are
-         * preserved and are not expanded from their dictionaries.
+         * <p>Alternative, optional-group, and slot tokens are read from the
+         * configured {@link PatternSyntax}. Slot references are preserved and
+         * are not expanded from their dictionaries.
          *
          * @param category result category
          * @param templateId result template id
@@ -527,7 +557,7 @@ public final class TemplateMatcher {
          */
         public Builder addExpandedTemplate(String category, String templateId, String pattern) {
             RulePattern logicalPattern = RulePattern.exact(category, templateId, pattern);
-            return addExpandedTemplate(logicalPattern, PatternExpander.expand(pattern, maxExpandedPatterns));
+            return addExpandedTemplate(logicalPattern, expandPattern(pattern));
         }
 
         /**
@@ -539,7 +569,7 @@ public final class TemplateMatcher {
          */
         public Builder addExpandedTemplate(String category, String pattern) {
             RulePattern logicalPattern = RulePattern.exact(category, GENERATED_TEMPLATE_ID_VALIDATION_VALUE, pattern);
-            List<String> expandedPatterns = PatternExpander.expand(pattern, maxExpandedPatterns);
+            List<PatternAst.Sequence> expandedPatterns = expandPattern(pattern);
             return addExpandedTemplate(
                     RulePattern.exact(category, nextGeneratedTemplateId(category), logicalPattern.pattern()),
                     expandedPatterns);
@@ -555,56 +585,90 @@ public final class TemplateMatcher {
             if (pattern == null) {
                 throw new IllegalArgumentException("pattern is required");
             }
+            if (patterns.contains(pattern)) {
+                return this;
+            }
+            PatternAst.Sequence parsedPattern = preparePattern(pattern);
+            return addPattern(pattern, parsedPattern);
+        }
+
+        private Builder addPattern(RulePattern pattern, PatternAst.Sequence parsedPattern) {
             if (!patterns.add(pattern)) {
                 return this;
             }
             registerLogicalTemplateId(pattern.category(), pattern.templateId());
-            addPatternToIndexes(pattern);
+            addPatternToIndexes(pattern, parsedPattern);
             return this;
         }
 
-        private Builder addExpandedTemplate(RulePattern logicalPattern, List<String> expandedPatterns) {
+        private Builder addExpandedTemplate(
+                RulePattern logicalPattern,
+                List<PatternAst.Sequence> expandedPatterns) {
             if (!expandedLogicalPatterns.add(logicalPattern)) {
                 return this;
             }
             registerLogicalTemplateId(logicalPattern.category(), logicalPattern.templateId());
-            for (String expandedPattern : expandedPatterns) {
+            for (PatternAst.Sequence expandedPattern : expandedPatterns) {
                 RulePattern compiledPattern = RulePattern.of(
                         logicalPattern.category(),
                         logicalPattern.templateId(),
-                        expandedPattern,
+                        PatternRenderer.render(expandedPattern, patternSyntax),
                         inferMode(expandedPattern),
                         logicalPattern.priority());
                 if (patterns.add(compiledPattern)) {
-                    addPatternToIndexes(compiledPattern);
+                    addPatternToIndexes(compiledPattern, expandedPattern);
                 }
             }
             return this;
         }
 
-        private void addPatternToIndexes(RulePattern pattern) {
-            List<Token> tokens = parsePattern(pattern.pattern());
-            registerReferencedSlots(tokens);
+        private List<PatternAst.Sequence> expandPattern(String pattern) {
+            PatternAst.Sequence parsedPattern = PatternParser.parseExpanded(pattern, patternSyntax);
+            return PatternExpander.expand(parsedPattern, maxExpandedPatterns);
+        }
+
+        private PatternAst.Sequence preparePattern(RulePattern pattern) {
+            PatternAst.Sequence parsedPattern = PatternParser.parse(pattern.pattern(), patternSyntax);
+            validatePatternMode(pattern, parsedPattern);
+            return parsedPattern;
+        }
+
+        private void validatePatternMode(RulePattern pattern, PatternAst.Sequence parsedPattern) {
             if (pattern.mode() == PatternMode.SLOT_SEQUENCE) {
-                if (!isSlotSequencePattern(tokens)) {
+                if (!isSlotSequencePattern(parsedPattern)) {
                     throw new IllegalArgumentException(
-                            "slot sequence pattern can only contain slots and '_' separators: "
+                            "slot sequence pattern can only contain slots and '"
+                                    + patternSyntax.sequenceSeparator() + "' separators: "
                                     + pattern.pattern());
                 }
+            }
+        }
+
+        private void addPatternToIndexes(RulePattern pattern, PatternAst.Sequence parsedPattern) {
+            registerReferencedSlots(parsedPattern);
+            if (pattern.mode() == PatternMode.SLOT_SEQUENCE) {
                 sequenceTemplates.add(new SequenceTemplate(
                         pattern.category(),
                         pattern.templateId(),
                         pattern.priority(),
-                        slotNames(tokens)));
+                        slotNames(parsedPattern)));
                 return;
             }
 
             Node node = root;
-            for (Token token : tokens) {
-                if (token.slotName == null) {
-                    node = node.charChildren.computeIfAbsent(token.character, ignored -> new Node());
+            for (PatternAst.Node patternNode : parsedPattern.nodes()) {
+                if (patternNode instanceof PatternAst.Text) {
+                    String text = ((PatternAst.Text) patternNode).value();
+                    for (int i = 0; i < text.length(); i++) {
+                        char character = text.charAt(i);
+                        node = node.charChildren.computeIfAbsent(character, ignored -> new Node());
+                    }
+                } else if (patternNode instanceof PatternAst.Slot) {
+                    String slotName = ((PatternAst.Slot) patternNode).name();
+                    node = findOrCreateSlotEdge(node, slotName).next;
                 } else {
-                    node = findOrCreateSlotEdge(node, token.slotName).next;
+                    throw new IllegalArgumentException(
+                            "generalized pattern nodes must be expanded before compilation");
                 }
             }
             node.outputs.add(new TemplateMeta(pattern.category(), pattern.templateId(), pattern.priority()));
@@ -620,13 +684,17 @@ public final class TemplateMatcher {
             if (patterns == null) {
                 throw new IllegalArgumentException("patterns is required");
             }
+            List<PatternAst.Sequence> parsedPatterns = new ArrayList<>();
             for (RulePattern pattern : patterns) {
                 if (pattern == null) {
                     throw new IllegalArgumentException("pattern is required");
                 }
+                parsedPatterns.add(preparePattern(pattern));
             }
+            int index = 0;
             for (RulePattern pattern : patterns) {
-                addPattern(pattern);
+                addPattern(pattern, parsedPatterns.get(index));
+                index++;
             }
             return this;
         }
@@ -671,9 +739,8 @@ public final class TemplateMatcher {
             return this;
         }
 
-        private static PatternMode inferMode(String pattern) {
-            List<Token> tokens = parsePattern(pattern);
-            if (isSlotSequencePattern(tokens)) {
+        private PatternMode inferMode(PatternAst.Sequence pattern) {
+            if (isSlotSequencePattern(pattern)) {
                 return PatternMode.SLOT_SEQUENCE;
             }
             return PatternMode.EXACT;
@@ -841,44 +908,38 @@ public final class TemplateMatcher {
             return category + "/" + templateId;
         }
 
-        private static List<Token> parsePattern(String pattern) {
-            List<Token> tokens = new ArrayList<>();
-            for (int i = 0; i < pattern.length();) {
-                char current = pattern.charAt(i);
-                if (current == '[') {
-                    int end = pattern.indexOf(']', i + 1);
-                    if (end < 0) {
-                        throw new IllegalArgumentException("unclosed slot in pattern: " + pattern);
-                    }
-                    String slotName = pattern.substring(i + 1, end);
-                    validateSlotName(slotName);
-                    tokens.add(Token.slot(slotName));
-                    i = end + 1;
-                } else {
-                    tokens.add(Token.character(current));
-                    i++;
-                }
-            }
-            return tokens;
-        }
-
-        private static boolean isSlotSequencePattern(List<Token> tokens) {
+        private boolean isSlotSequencePattern(PatternAst.Sequence pattern) {
             boolean hasSlot = false;
-            for (Token token : tokens) {
-                if (token.slotName != null) {
+            for (PatternAst.Node node : pattern.nodes()) {
+                if (node instanceof PatternAst.Slot) {
                     hasSlot = true;
-                } else if (token.character != '_') {
+                } else if (!(node instanceof PatternAst.Text)
+                        || !isSequenceSeparatorText((PatternAst.Text) node)) {
                     return false;
                 }
             }
             return hasSlot;
         }
 
-        private static List<String> slotNames(List<Token> tokens) {
+        private boolean isSequenceSeparatorText(PatternAst.Text text) {
+            if (text.escaped()) {
+                return false;
+            }
+            String value = text.value();
+            String separator = patternSyntax.sequenceSeparator();
+            for (int index = 0; index < value.length(); index += separator.length()) {
+                if (!value.startsWith(separator, index)) {
+                    return false;
+                }
+            }
+            return !value.isEmpty();
+        }
+
+        private static List<String> slotNames(PatternAst.Sequence pattern) {
             List<String> slotNames = new ArrayList<>();
-            for (Token token : tokens) {
-                if (token.slotName != null) {
-                    slotNames.add(token.slotName);
+            for (PatternAst.Node node : pattern.nodes()) {
+                if (node instanceof PatternAst.Slot) {
+                    slotNames.add(((PatternAst.Slot) node).name());
                 }
             }
             return slotNames;
@@ -918,10 +979,10 @@ public final class TemplateMatcher {
             return values;
         }
 
-        private void registerReferencedSlots(List<Token> tokens) {
-            for (Token token : tokens) {
-                if (token.slotName != null) {
-                    referencedSlotNames.add(token.slotName);
+        private void registerReferencedSlots(PatternAst.Sequence pattern) {
+            for (PatternAst.Node node : pattern.nodes()) {
+                if (node instanceof PatternAst.Slot) {
+                    referencedSlotNames.add(((PatternAst.Slot) node).name());
                 }
             }
         }
@@ -951,16 +1012,7 @@ public final class TemplateMatcher {
         }
 
         private static void validateSlotName(String slotName) {
-            if (slotName == null || slotName.isEmpty()) {
-                throw new IllegalArgumentException("slotName is required");
-            }
-            for (int i = 0; i < slotName.length(); i++) {
-                char c = slotName.charAt(i);
-                boolean valid = Character.isLetterOrDigit(c) || c == '_' || c == '-';
-                if (!valid) {
-                    throw new IllegalArgumentException("invalid slotName: " + slotName);
-                }
-            }
+            PatternParser.validateSlotName(slotName);
         }
     }
 
@@ -1599,21 +1651,4 @@ public final class TemplateMatcher {
         }
     }
 
-    private static final class Token {
-        private final Character character;
-        private final String slotName;
-
-        private Token(Character character, String slotName) {
-            this.character = character;
-            this.slotName = slotName;
-        }
-
-        private static Token character(char character) {
-            return new Token(character, null);
-        }
-
-        private static Token slot(String slotName) {
-            return new Token(null, slotName);
-        }
-    }
 }

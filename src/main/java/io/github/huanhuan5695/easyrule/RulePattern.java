@@ -6,7 +6,8 @@ import java.util.Objects;
  * Immutable description of a template rule.
  *
  * <p>A rule belongs to a category and has a caller-defined template id. The
- * pattern may contain fixed text and slot references such as {@code [city]}.
+ * pattern may contain fixed text and slot references. Pattern syntax is
+ * validated by the {@link TemplateMatcher.Builder} that registers the rule.
  */
 public final class RulePattern {
     private final String category;
@@ -21,7 +22,6 @@ public final class RulePattern {
         this.pattern = requireText(pattern, "pattern");
         this.mode = Objects.requireNonNull(mode, "mode");
         this.priority = priority;
-        validatePattern(pattern, mode);
     }
 
     /**
@@ -54,7 +54,7 @@ public final class RulePattern {
      *
      * @param category rule category returned in match results
      * @param templateId unique template id returned in match results
-     * @param pattern slots separated by underscores, for example {@code [like]_[song]}
+     * @param pattern slots separated by the configured sequence separator
      * @return rule pattern
      */
     public static RulePattern slotSequence(String category, String templateId, String pattern) {
@@ -67,7 +67,7 @@ public final class RulePattern {
      *
      * @param category rule category returned in match results
      * @param templateId unique template id returned in match results
-     * @param pattern slots separated by underscores, for example {@code [like]_[song]}
+     * @param pattern slots separated by the configured sequence separator
      * @param priority higher values sort before lower values
      * @return rule pattern
      */
@@ -186,48 +186,4 @@ public final class RulePattern {
         return value;
     }
 
-    private static void validatePattern(String pattern, PatternMode mode) {
-        boolean inSlot = false;
-        boolean hasSlot = false;
-        int slotStart = -1;
-        for (int i = 0; i < pattern.length(); i++) {
-            char current = pattern.charAt(i);
-            if (current == '[') {
-                if (inSlot) {
-                    throw new IllegalArgumentException("nested slot is not allowed: " + pattern);
-                }
-                inSlot = true;
-                slotStart = i + 1;
-            } else if (current == ']') {
-                if (!inSlot) {
-                    throw new IllegalArgumentException("unopened slot in pattern: " + pattern);
-                }
-                validateSlotName(pattern.substring(slotStart, i));
-                inSlot = false;
-                hasSlot = true;
-            } else if (!inSlot && mode == PatternMode.SLOT_SEQUENCE && current != '_') {
-                throw new IllegalArgumentException(
-                        "slot sequence pattern can only contain slots and '_' separators: " + pattern);
-            }
-        }
-        if (inSlot) {
-            throw new IllegalArgumentException("unclosed slot in pattern: " + pattern);
-        }
-        if (mode == PatternMode.SLOT_SEQUENCE && !hasSlot) {
-            throw new IllegalArgumentException("slot sequence pattern must contain at least one slot");
-        }
-    }
-
-    private static void validateSlotName(String slotName) {
-        if (slotName == null || slotName.isEmpty()) {
-            throw new IllegalArgumentException("slotName is required");
-        }
-        for (int i = 0; i < slotName.length(); i++) {
-            char c = slotName.charAt(i);
-            boolean valid = Character.isLetterOrDigit(c) || c == '_' || c == '-';
-            if (!valid) {
-                throw new IllegalArgumentException("invalid slotName: " + slotName);
-            }
-        }
-    }
 }

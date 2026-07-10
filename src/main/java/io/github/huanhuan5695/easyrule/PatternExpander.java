@@ -1,6 +1,7 @@
 package io.github.huanhuan5695.easyrule;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -9,22 +10,24 @@ final class PatternExpander {
     private PatternExpander() {
     }
 
-    static List<String> expand(String pattern, int maxExpandedPatterns) {
-        if (pattern == null || pattern.isEmpty()) {
+    static List<PatternAst.Sequence> expand(
+            PatternAst.Sequence pattern,
+            int maxExpandedPatterns) {
+        if (pattern == null) {
             throw new IllegalArgumentException("pattern is required");
         }
         if (maxExpandedPatterns <= 0) {
             throw new IllegalArgumentException("maxExpandedPatterns must be positive");
         }
 
-        List<List<String>> segments = parseSegments(pattern, maxExpandedPatterns);
-        List<String> results = new ArrayList<>();
-        results.add("");
-        for (List<String> alternatives : segments) {
-            Set<String> next = new LinkedHashSet<>();
-            for (String prefix : results) {
-                for (String alternative : alternatives) {
-                    if (next.add(prefix + alternative) && next.size() > maxExpandedPatterns) {
+        List<PatternAst.Sequence> results = new ArrayList<>();
+        results.add(new PatternAst.Sequence(Collections.emptyList()));
+        for (PatternAst.Node node : pattern.nodes()) {
+            List<PatternAst.Sequence> alternatives = expandNode(node, maxExpandedPatterns);
+            Set<PatternAst.Sequence> next = new LinkedHashSet<>();
+            for (PatternAst.Sequence prefix : results) {
+                for (PatternAst.Sequence alternative : alternatives) {
+                    if (next.add(prefix.append(alternative)) && next.size() > maxExpandedPatterns) {
                         throw limitExceeded(next.size(), maxExpandedPatterns);
                     }
                 }
@@ -34,114 +37,42 @@ final class PatternExpander {
         return results;
     }
 
-    private static List<List<String>> parseSegments(String pattern, int maxExpandedPatterns) {
-        List<List<String>> segments = new ArrayList<>();
-        StringBuilder literal = new StringBuilder();
-        for (int i = 0; i < pattern.length();) {
-            char current = pattern.charAt(i);
-            if (current == '[') {
-                int end = pattern.indexOf(']', i + 1);
-                if (end < 0) {
-                    throw new IllegalArgumentException("unclosed slot in pattern: " + pattern);
-                }
-                literal.append(pattern, i, end + 1);
-                i = end + 1;
-            } else if (current == '(') {
-                flushLiteral(segments, literal);
-                int end = findGroupEnd(pattern, i);
-                List<String> alternatives = splitAlternatives(
-                        pattern.substring(i + 1, end), pattern, maxExpandedPatterns);
-                int next = end + 1;
-                if (next < pattern.length() && pattern.charAt(next) == '?') {
-                    List<String> optional = new ArrayList<>();
-                    optional.add("");
-                    optional.addAll(alternatives);
-                    if (optional.size() > maxExpandedPatterns) {
-                        throw limitExceeded(optional.size(), maxExpandedPatterns);
-                    }
-                    alternatives = optional;
-                    next++;
-                }
-                segments.add(alternatives);
-                i = next;
-            } else if (current == ')') {
-                throw new IllegalArgumentException("unopened group in pattern: " + pattern);
-            } else {
-                literal.append(current);
-                i++;
-            }
-        }
-        flushLiteral(segments, literal);
-        return segments;
-    }
-
-    private static void flushLiteral(List<List<String>> segments, StringBuilder literal) {
-        if (literal.length() == 0) {
-            return;
-        }
-        List<String> segment = new ArrayList<>();
-        segment.add(literal.toString());
-        segments.add(segment);
-        literal.setLength(0);
-    }
-
-    private static int findGroupEnd(String pattern, int start) {
-        for (int i = start + 1; i < pattern.length(); i++) {
-            char current = pattern.charAt(i);
-            if (current == '[') {
-                int end = pattern.indexOf(']', i + 1);
-                if (end < 0) {
-                    throw new IllegalArgumentException("unclosed slot in pattern: " + pattern);
-                }
-                i = end;
-            } else if (current == '(') {
-                throw new IllegalArgumentException("nested group is not supported: " + pattern);
-            } else if (current == ')') {
-                return i;
-            }
-        }
-        throw new IllegalArgumentException("unclosed group in pattern: " + pattern);
-    }
-
-    private static List<String> splitAlternatives(
-            String group,
-            String pattern,
+    private static List<PatternAst.Sequence> expandNode(
+            PatternAst.Node node,
             int maxExpandedPatterns) {
-        Set<String> alternatives = new LinkedHashSet<>();
-        StringBuilder current = new StringBuilder();
-        for (int i = 0; i < group.length();) {
-            char c = group.charAt(i);
-            if (c == '[') {
-                int end = group.indexOf(']', i + 1);
-                if (end < 0) {
-                    throw new IllegalArgumentException("unclosed slot in pattern: " + pattern);
-                }
-                current.append(group, i, end + 1);
-                i = end + 1;
-            } else if (c == '|') {
-                addAlternative(alternatives, current, pattern, maxExpandedPatterns);
-                i++;
-            } else {
-                current.append(c);
-                i++;
+        if (node instanceof PatternAst.Alternatives) {
+            Set<PatternAst.Sequence> alternatives = new LinkedHashSet<>();
+            for (PatternAst.Sequence alternative : ((PatternAst.Alternatives) node).alternatives()) {
+                addAllBounded(
+                        alternatives,
+                        expand(alternative, maxExpandedPatterns),
+                        maxExpandedPatterns);
             }
+            return new ArrayList<>(alternatives);
         }
-        addAlternative(alternatives, current, pattern, maxExpandedPatterns);
-        return new ArrayList<>(alternatives);
+        if (node instanceof PatternAst.OptionalNode) {
+            Set<PatternAst.Sequence> alternatives = new LinkedHashSet<>();
+            alternatives.add(new PatternAst.Sequence(Collections.emptyList()));
+            PatternAst.Node optionalNode = ((PatternAst.OptionalNode) node).node();
+            addAllBounded(
+                    alternatives,
+                    expandNode(optionalNode, maxExpandedPatterns),
+                    maxExpandedPatterns);
+            return new ArrayList<>(alternatives);
+        }
+        return Collections.singletonList(
+                new PatternAst.Sequence(Collections.singletonList(node)));
     }
 
-    private static void addAlternative(
-            Set<String> alternatives,
-            StringBuilder current,
-            String pattern,
-            int maxExpandedPatterns) {
-        if (current.length() == 0) {
-            throw new IllegalArgumentException("empty alternative is not allowed: " + pattern);
+    private static void addAllBounded(
+            Set<PatternAst.Sequence> target,
+            List<PatternAst.Sequence> values,
+            int limit) {
+        for (PatternAst.Sequence value : values) {
+            if (target.add(value) && target.size() > limit) {
+                throw limitExceeded(target.size(), limit);
+            }
         }
-        if (alternatives.add(current.toString()) && alternatives.size() > maxExpandedPatterns) {
-            throw limitExceeded(alternatives.size(), maxExpandedPatterns);
-        }
-        current.setLength(0);
     }
 
     private static IllegalArgumentException limitExceeded(int observed, int limit) {

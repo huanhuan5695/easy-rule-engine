@@ -1,62 +1,63 @@
-# 模板槽位匹配器
+# Easy Rule Engine
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 [![CI](https://github.com/huanhuan5695/easy-rule-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/huanhuan5695/easy-rule-engine/actions/workflows/ci.yml)
+[![Java 11+](https://img.shields.io/badge/Java-11%2B-blue.svg)](https://openjdk.org/projects/jdk/11/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-这是一个基于 Java 的模板匹配示例项目，用于把用户输入文本快速匹配到业务模板，并返回模板所属分类、模板唯一 ID，以及命中的槽位值和槽位在原文中的位置。
+Easy Rule Engine is a lightweight, dependency-free Java library for matching text against business templates. A successful match returns the rule category, template ID, priority, matching mode, and every captured slot with its source position.
 
-项目核心适合这些场景：
+It is useful for deterministic intent routing, command parsing, FAQ classification, and dictionary-backed entity extraction when a full NLP stack would be unnecessary.
 
-- 意图识别：把一句话路由到指定 `category` 和 `templateId`。
-- 模板分类：同一分类下维护多个模板，每个模板有唯一 ID。
-- 槽位抽取：在匹配模板时，同时拿到 `[people]`、`[city]`、`[song]` 等用户自定义槽位。
-- 字典匹配：每个槽位可以维护自己的词典，例如 `people -> 中国人、美国人、学生`。
+## Why Use It?
 
-## 项目结构
+- Match fixed text and user-defined slots in one pattern, such as `I am [people]`.
+- Keep multiple templates under one category while receiving the exact `templateId` that matched.
+- Fall back from strict whole-input matching to ordered slot-sequence matching.
+- Capture repeated or multiple slots with UTF-16 `start` and `end` offsets.
+- Express bounded alternatives with syntax such as `(I|we)?[like](movies|series)`.
+- Replace `[]`, `()`, `|`, `?`, `_`, and the escape marker with application-specific tokens.
+- Share immutable matcher snapshots safely across threads.
+- Protect services with configurable limits for input length, search states, slot hits, results, and pattern expansion.
+- Run with Java 11 and no runtime dependencies.
 
-```text
-pom.xml                # Maven 构建配置，包含 JUnit 5 测试依赖
-Makefile               # 无 Maven 环境下的 smoke test 和 benchmark 快捷命令
-LICENSE                # MIT 许可证
-CONTRIBUTING.md        # 贡献指南
-docs/performance.md    # 性能测试说明
-docs/release.md        # 发布流程说明
+## Requirements
 
-examples/
-  QuickStart.java      # 可直接运行的入门示例
+- JDK 11 or newer
+- Maven 3.8+ for the standard build, or `make` for dependency-free checks
 
-src/main/java/io/github/huanhuan5695/easyrule/
-  DoubleArrayTrie.java     # 双数组前缀树，用于高效字典前缀匹配
-  MatchMode.java           # 单次匹配策略枚举
-  MatchOptions.java        # 单次匹配选项
-  PatternMode.java         # 模板匹配模式枚举
-  RulePattern.java         # 稳定的规则模板描述对象
-  TemplateMatcher.java     # 模板匹配器，支持严格模板和槽位序列两种模式
+The artifact is not yet published to Maven Central. Install it locally before using it from another Maven project.
 
-src/test/java/io/github/huanhuan5695/easyrule/
-  DoubleArrayTrieTest.java # 双数组前缀树测试入口
-  TemplateMatcherTest.java # 模板匹配器测试入口
-  TemplateMatcherApiTest.java      # JUnit 5 API 测试
-  TemplateMatcherApiSmokeTest.java # 无依赖 API smoke test
+## Quick Start
 
-src/test/java/
-  TemplateMatcherPackageSmokeTest.java # 外部消费者 import 验证
+### 1. Clone and verify
 
-src/benchmark/java/
-  TemplateMatcherBenchmark.java # 无依赖本地 benchmark
+```bash
+git clone https://github.com/huanhuan5695/easy-rule-engine.git
+cd easy-rule-engine
+mvn test
 ```
 
-项目提供 Maven 工程配置；如果本机暂时没有 Maven，也可以使用 `javac` 和 `java` 运行无依赖测试入口。
+Without Maven:
 
-## Maven 坐标
+```bash
+make check
+```
 
-当前版本尚未发布到 Maven Central。作为本地依赖使用时，可以先安装到本地仓库：
+Run the complete example:
+
+```bash
+make example
+```
+
+### 2. Install the library locally
 
 ```bash
 mvn install
 ```
 
-计划发布坐标：
+Add it to another Maven project:
 
 ```xml
 <dependency>
@@ -66,463 +67,7 @@ mvn install
 </dependency>
 ```
 
-## 快速运行
-
-运行入门示例：
-
-```bash
-make example
-```
-
-推荐使用 Maven：
-
-```bash
-mvn test
-mvn package
-```
-
-如果本机没有 Maven，可以在项目根目录执行：
-
-```bash
-make check
-```
-
-期望输出：
-
-```text
-All DoubleArrayTrie tests passed.
-All TemplateMatcher tests passed.
-All TemplateMatcherApi smoke tests passed.
-All TemplateMatcherPackage smoke tests passed.
-```
-
-远程仓库包含 GitHub Actions CI，push 或 pull request 时会使用 Java 11 执行：
-
-```bash
-mvn -B test
-mvn -B -DskipTests package
-make smoke
-make example
-```
-
-`mvn package` 会生成普通 jar、sources jar 和 javadocs jar，便于后续发布到 Maven Central。
-
-## 性能测试
-
-项目提供一个无依赖 benchmark，用于在同一机器上比较优化前后的相对性能：
-
-```bash
-make benchmark
-```
-
-更多说明见 `docs/performance.md`。
-
-## 贡献与发布
-
-- 贡献流程见 `CONTRIBUTING.md`。
-- 性能测试说明见 `docs/performance.md`。
-- 发布检查清单见 `docs/release.md`。
-- GitHub issue 和 pull request 模板位于 `.github/`。
-
-## 基本用法
-
-完整可运行示例见 `examples/QuickStart.java`。核心流程是先构建槽位字典，再注册模板：
-
-```java
-import io.github.huanhuan5695.easyrule.RulePattern;
-import io.github.huanhuan5695.easyrule.TemplateMatcher;
-
-import java.util.Arrays;
-import java.util.List;
-
-TemplateMatcher matcher = TemplateMatcher.builder()
-        .addSlotDictionary("people", Arrays.asList("中国人", "美国人", "学生"))
-        .addSlotDictionary("song", Arrays.asList("青花瓷", "稻香"))
-        .addPattern(RulePattern.exact("music", "person-song", "[people]喜欢唱[song]"))
-        .build();
-
-List<TemplateMatcher.MatchResult> results = matcher.match("中国人喜欢唱青花瓷");
-```
-
-读取匹配结果：
-
-```java
-TemplateMatcher.MatchResult result = results.get(0);
-
-result.category();   // "music"
-result.templateId(); // "person-song"
-result.mode();       // PatternMode.EXACT
-result.captures();   // { people=["中国人"], song=["青花瓷"] }
-```
-
-如果需要槽位在原文中的位置，使用 `slotCaptures()`：
-
-```java
-TemplateMatcher.SlotCapture people = result.slotCaptures().get("people").get(0);
-
-people.slotName(); // "people"
-people.value();    // "中国人"
-people.start();    // 0
-people.end();      // 3
-```
-
-`start` 是命中内容的起始下标，`end` 是结束下标的后一位，遵循 Java `substring(start, end)` 的习惯。
-
-## 匹配模式
-
-### 1. 严格模板匹配
-
-严格模板中可以同时包含固定文本和槽位：
-
-```text
-我是[people]我喜欢唱歌
-```
-
-输入：
-
-```text
-我是中国人我喜欢唱歌
-```
-
-匹配过程：
-
-```text
-固定文本：我 -> 是
-槽位：[people] -> 中国人
-固定文本：我 -> 喜 -> 欢 -> 唱 -> 歌
-```
-
-命中后返回：
-
-```text
-category = music
-templateId = sing
-people = 中国人
-```
-
-### 2. 槽位序列匹配
-
-如果 pattern 中只有槽位和 `_` 分隔符，例如：
-
-```text
-[like]_[sing]
-```
-
-它会被识别为槽位序列模式。这里的 `_` 只是分隔符，不要求输入中真的出现 `_`。
-
-输入：
-
-```text
-我喜欢唱歌
-```
-
-如果字典中存在：
-
-```text
-like -> 喜欢、爱
-sing -> 唱歌、唱曲
-```
-
-则可以命中：
-
-```text
-like = 喜欢, start = 1, end = 3
-sing = 唱歌, start = 3, end = 5
-```
-
-槽位序列模式适合描述“这些槽位按顺序出现在句子里”的意图，不要求整句话完全等于模板。
-
-## 匹配优先级
-
-`TemplateMatcher.match(input)` 使用两阶段策略：
-
-1. 先执行严格模板匹配。
-2. 如果严格模板有结果，直接返回，不再执行槽位序列匹配。
-3. 如果严格模板没有结果，再执行槽位序列匹配。
-
-这样可以保证明确模板优先，弱匹配兜底。
-
-例如同时存在：
-
-```text
-exact:    我[like][sing]
-sequence: [like]_[sing]
-```
-
-输入：
-
-```text
-我喜欢唱歌
-```
-
-会优先返回 `exact` 模板，而不是 `sequence` 模板。
-
-## 实现原理
-
-### 双数组前缀树
-
-`DoubleArrayTrie` 使用两个核心数组：
-
-```text
-base[]
-check[]
-```
-
-从节点 `s` 走字符 `c` 时，目标位置为：
-
-```text
-t = base[s] + code(c)
-```
-
-然后用：
-
-```text
-check[t] == s
-```
-
-确认这个位置确实是从 `s` 转移过来的。
-
-这种结构避免了普通 Trie 中大量对象和指针的开销，适合静态字典的快速前缀查询。项目中槽位字典就是用它构建的。
-
-### 严格模板匹配
-
-模板会先被解析成 token：
-
-```text
-我是[people]我喜欢唱歌
-```
-
-解析为：
-
-```text
-TEXT("我")
-TEXT("是")
-SLOT("people")
-TEXT("我")
-TEXT("喜")
-TEXT("欢")
-TEXT("唱")
-TEXT("歌")
-```
-
-固定字符会进入模板 Trie 的字符边，槽位会进入特殊的 `SlotEdge`。
-
-匹配时维护状态：
-
-```text
-当前模板节点
-当前输入位置
-已经捕获的槽位
-```
-
-当遇到槽位边时，从当前输入位置调用对应槽位字典的前缀匹配。如果一个槽位有多个候选，例如 `中国` 和 `中国人`，匹配器会保留多个候选状态，后续固定文本匹配失败时可以自动回退到较短候选。
-
-### 槽位序列匹配
-
-槽位序列 pattern：
-
-```text
-[like]_[sing]
-```
-
-会被编译为：
-
-```text
-like -> sing
-```
-
-匹配时会先为槽位序列所需的字典构建共享扫描索引。通过 `Collection<String>` 添加的槽位字典和通过 `DoubleArrayTrie` 传入的预构建字典都会进入该索引，输入文本只需要扫描一次，就能收集多个槽位的命中项。每找到一个槽位，就记录它的值、起始位置和结束位置，然后继续推进下一个槽位。
-
-该模式允许输入前后有额外文本，例如：
-
-```text
-我喜欢唱歌
-他非常喜欢大声唱歌
-```
-
-只要槽位按顺序出现，就可以匹配。
-
-### 非递归状态队列
-
-模板匹配没有使用递归，而是用 `ArrayDeque` 保存待处理状态。这样可以避免长模板或大量候选导致 Java 调用栈溢出，也方便通过 `maxStates` 和 `maxResults` 控制匹配成本。
-
-默认限制：
-
-```text
-maxStates = 10000
-maxResults = 100
-maxInputLength = 100000
-maxSlotHits = 100000
-```
-
-可以在构建时调整：
-
-```java
-TemplateMatcher matcher = TemplateMatcher.builder()
-        .maxStates(5000)
-        .maxResults(20)
-        .maxInputLength(2000)
-        .maxSlotHits(10000)
-        .build();
-```
-
-`maxInputLength` 使用 Java `String.length()` 的 UTF-16 长度。`maxSlotHits`
-限制槽位序列扫描阶段收集的词典命中总数，避免超长输入或高重叠词典在状态匹配前占用过多内存。
-匹配结果在计算过程中只保留排序后的 Top-K，内部槽位状态使用共享链式结构，因此较小的
-`maxResults` 也会直接约束结果集合的内存占用。
-
-## API 说明
-
-### 添加槽位字典
-
-```java
-addSlotDictionary(String slotName, Collection<String> values)
-```
-
-示例：
-
-```java
-.addSlotDictionary("city", Arrays.asList("北京", "上海", "杭州"))
-```
-
-从配置文件批量加载时，可以使用：
-
-```java
-.addSlotDictionaries(Map.of(
-        "people", Arrays.asList("中国人", "美国人"),
-        "song", Arrays.asList("青花瓷", "稻香")))
-```
-
-批量注册会先校验全部输入；如果其中一项非法，本次批量调用不会写入任何字典。
-
-生产环境中也可以从 UTF-8 文本文件加载词典：
-
-```java
-.addSlotDictionaryFile("city", Path.of("dict/city.txt"))
-```
-
-文件中每个非空行是一条词典值；行首去除空白后以 `#` 开头的行会被当作注释忽略。
-
-也可以直接传入已经构建好的 `DoubleArrayTrie`：
-
-```java
-.addSlotDictionary("city", cityTrie)
-```
-
-如果字典由外部系统预构建并批量加载，可以使用：
-
-```java
-.addSlotDictionaryTries(Map.of(
-        "city", cityTrie,
-        "song", songTrie))
-```
-
-批量 trie 注册同样会先校验全部输入；如果其中一项非法，本次批量调用不会写入任何字典。
-
-### 添加模板
-
-```java
-addPattern(RulePattern pattern)
-```
-
-示例：
-
-```java
-.addPattern(RulePattern.exact("travel", "from-city", "我来自[city]"))
-.addPattern(RulePattern.slotSequence("music", "like-sing", "[like]_[sing]"))
-```
-
-批量注册模板：
-
-```java
-.addPatterns(Arrays.asList(
-        RulePattern.exact("travel", "from-city", "我来自[city]"),
-        RulePattern.slotSequence("music", "like-sing", "[like]_[sing]")))
-```
-
-批量注册模板同样是原子操作；如果其中一项非法，本次批量调用不会写入任何模板。
-
-如果多个模板都命中同一段输入，可以给规则设置优先级。数字越大，结果越靠前：
-
-```java
-.addPattern(RulePattern.exact("profile", "low", "我是[people]", 0))
-.addPattern(RulePattern.exact("profile", "high", "我是[people]", 10))
-```
-
-参数含义：
-
-- `category`：模板分类，例如 `music`、`travel`、`profile`。
-- `templateId`：模板唯一 ID。
-- `pattern`：模板内容，支持固定文本和 `[slotName]`。
-- `mode`：模板模式，推荐显式使用 `PatternMode.EXACT` 或 `PatternMode.SLOT_SEQUENCE`。
-- `priority`：可选优先级，默认为 `0`，值越大排序越靠前。
-
-为了兼容旧代码，仍然保留：
-
-```java
-addTemplate(String category, String templateId, String pattern)
-```
-
-该方法会根据 pattern 形态自动推断模式。
-
-如果调用方不想自己维护模板 ID，也可以省略 `templateId`：
-
-```java
-TemplateMatcher matcher = TemplateMatcher.builder()
-        .addSlotDictionary("city", Arrays.asList("北京", "上海"))
-        .addTemplate("travel", "我来自[city]")
-        .build();
-```
-
-Builder 会按添加顺序生成 `auto-1`、`auto-2` 这类内部 ID，并在命中结果的
-`templateId()` 中返回。需要跨系统持久化、审计或灰度配置时，仍建议使用显式
-`templateId`。
-
-### 泛化模板有限展开
-
-如果希望一个 pattern 表达有限个固定文本变体，可以使用显式的泛化模板 API：
-
-```java
-TemplateMatcher matcher = TemplateMatcher.builder()
-        .addSlotDictionary("like", Arrays.asList("喜欢"))
-        .addExpandedTemplate("media", "intent", "(我|你)?[like](电影|电视剧)")
-        .build();
-```
-
-上面的模板会在构建期展开为：
-
-```text
-[like]电影
-[like]电视剧
-我[like]电影
-我[like]电视剧
-你[like]电影
-你[like]电视剧
-```
-
-匹配结果仍返回原始 `templateId`，即 `intent`。当前只支持两个泛化语法：
-
-- `(a|b|c)`：固定文本选项。
-- `(a|b|c)?`：整个选项组可有可无。
-
-`[slotName]` 不会按字典值提前展开，仍由匹配阶段从槽位字典中命中。这样可以避免大词典造成模板数量爆炸。普通
-`addTemplate(...)` 不会解释 `()`、`|`、`?`，需要泛化语法时请显式使用
-`addExpandedTemplate(...)`。
-
-生产环境建议限制单条泛化模板的展开数量：
-
-```java
-TemplateMatcher.builder()
-        .maxExpandedPatterns(100)
-        .addExpandedTemplate("media", "intent", "(我|你)?[like](电影|电视剧)");
-```
-
-展开器会在任意中间阶段首次超过上限时立即停止，不会先生成完整笛卡尔积。超过上限会抛出
-`IllegalArgumentException`，例如 `expanded pattern limit exceeded: 101 > 100`。
-
-### 构建期严格校验
-
-默认情况下，模板引用了不存在的槽位字典时，匹配阶段会返回空结果。生产环境建议开启严格校验，让配置错误在 `build()` 阶段直接暴露：
+### 3. Build a matcher
 
 ```java
 import io.github.huanhuan5695.easyrule.RulePattern;
@@ -533,145 +78,297 @@ import java.util.Arrays;
 TemplateMatcher matcher = TemplateMatcher.builder()
         .strictSlotValidation()
         .strictTemplateIdValidation()
-        .addSlotDictionary("people", Arrays.asList("中国人"))
-        .addPattern(RulePattern.exact("profile", "nationality", "我是[people]"))
+        .addSlotDictionary("people", Arrays.asList("Chinese", "American", "student"))
+        .addSlotDictionary("song", Arrays.asList("Imagine", "Yesterday"))
+        .addPattern(RulePattern.exact(
+                "music", "person-song", "[people] likes [song]", 10))
         .build();
 ```
 
-如果缺少槽位字典，例如模板引用了 `[people]` 但没有添加 `people` 字典，会抛出：
+Slots are written as `[slotName]`. Every referenced slot reads candidates from the dictionary registered under the same name.
 
-```text
-missing slot dictionaries: people
-```
-
-如果同一个 `category` 下重复使用同一个 `templateId`，开启 `strictTemplateIdValidation()` 后会抛出：
-
-```text
-duplicate template ids: profile/nationality
-```
-
-### 匹配输入
+### 4. Match input and inspect the result
 
 ```java
-List<TemplateMatcher.MatchResult> results = matcher.match(input);
+TemplateMatcher.MatchResult result = matcher
+        .matchFirst("student likes Imagine")
+        .orElseThrow(() -> new IllegalStateException("no template matched"));
+
+System.out.println(result.category());       // music
+System.out.println(result.templateId());     // person-song
+System.out.println(result.captures());       // {people=[student], song=[Imagine]}
+
+TemplateMatcher.SlotCapture person = result.slotCaptures().get("people").get(0);
+System.out.println(person.value());          // student
+System.out.println(person.start());          // 0
+System.out.println(person.end());            // 7
 ```
 
-默认匹配策略是 `EXACT_THEN_SLOT_SEQUENCE`：先跑严格模板；如果严格模板没有命中，再跑槽位序列。也可以在单次调用时指定策略、返回数量和状态访问上限：
+`start` is inclusive and `end` is exclusive, matching `String.substring(start, end)`. Positions use Java UTF-16 indexes.
+
+## Core Concepts
+
+| Concept | Meaning | Example |
+| --- | --- | --- |
+| `category` | Business group returned after a match | `music` |
+| `templateId` | Stable rule identifier inside a category | `person-song` |
+| `pattern` | Fixed text combined with slots | `[people] likes [song]` |
+| slot | User-defined dictionary reference | `[people]` |
+| `priority` | Higher values are returned first | `10` |
+| `PatternMode` | How one rule is interpreted | `EXACT`, `SLOT_SEQUENCE` |
+| `MatchMode` | Which rule groups one request executes | `EXACT_THEN_SLOT_SEQUENCE` |
+| `PatternSyntax` | Matcher-wide tokens used to parse pattern strings | `${slot}`, `{a/b}~` |
+
+## Pattern Types
+
+### Exact templates
+
+An exact template must consume the complete input. Fixed text and slots can be mixed freely:
+
+```java
+.addPattern(RulePattern.exact(
+        "profile", "nationality", "I am [people]"))
+```
+
+If a dictionary contains both `China` and `Chinese`, the matcher keeps viable prefix candidates while traversing the remaining pattern. This prevents an early longest-prefix choice from hiding a valid full match.
+
+### Slot-sequence templates
+
+A slot-sequence template contains only slots and `_` separators:
+
+```java
+.addPattern(RulePattern.slotSequence(
+        "music", "like-sing", "[like]_[sing]"))
+```
+
+The underscore separates slots in the pattern; it is not expected in the input. `[like]_[sing]` matches `I really like to sing` when dictionary values appear in that order. Extra text before, between, or after slots is allowed.
+
+### Matching strategy
+
+The default request strategy is `EXACT_THEN_SLOT_SEQUENCE`:
+
+1. Run exact templates.
+2. Return immediately when at least one exact template matches.
+3. Run slot-sequence templates only after an exact miss.
+
+Override it per request:
 
 ```java
 import io.github.huanhuan5695.easyrule.MatchMode;
 import io.github.huanhuan5695.easyrule.MatchOptions;
 
-List<TemplateMatcher.MatchResult> results = matcher.match(
+TemplateMatcher.MatchResult result = matcher.matchFirst(
         input,
         MatchOptions.builder()
                 .mode(MatchMode.SLOT_SEQUENCE_ONLY)
-                .maxResults(5)
-                .maxStates(500)
-                .build());
+                .maxResults(1)
+                .build())
+        .orElse(null);
 ```
 
-如果只关心排序后的最佳命中，可以使用 `matchFirst`，它返回 `Optional<MatchResult>`，无命中时不需要手动判断空列表：
+Available strategies are `EXACT_THEN_SLOT_SEQUENCE`, `EXACT_ONLY`, `SLOT_SEQUENCE_ONLY`, and `ALL`.
+
+## Generalized Templates
+
+Use finite expansion when a rule has a small, known set of text alternatives:
 
 ```java
-import java.util.Optional;
-
-Optional<TemplateMatcher.MatchResult> best = matcher.matchFirst(input);
-
-best.ifPresent(result -> {
-    System.out.println(result.category());
-    System.out.println(result.templateId());
-});
-```
-
-`matchFirst(input, options)` 会保留 `MatchOptions` 中的匹配策略和状态上限，并把本次返回数量收紧为 1。
-
-可用策略：
-
-- `EXACT_THEN_SLOT_SEQUENCE`：默认策略，精确优先，失败后槽位序列兜底。
-- `EXACT_ONLY`：只执行严格模板匹配。
-- `SLOT_SEQUENCE_ONLY`：只执行槽位序列匹配。
-- `ALL`：同时返回严格模板和槽位序列结果，再统一排序和裁剪。
-
-`maxResults`、`maxStates`、`maxInputLength` 和 `maxSlotHits` 的单次调用配置只能收紧 matcher
-构建时的全局限制，不能绕过全局限制。例如：
-
-```java
-MatchOptions options = MatchOptions.builder()
-        .maxResults(5)
-        .maxStates(2000)
-        .maxInputLength(1000)
-        .maxSlotHits(5000)
+TemplateMatcher matcher = TemplateMatcher.builder()
+        .addSlotDictionary("like", Arrays.asList("likes", "loves"))
+        .addExpandedTemplate(
+                "media", "media-like", "(I|we)?[like](movies|series)")
         .build();
 ```
 
-`maxStates` 是整个 `match()` 调用共享的状态预算；即使 `ALL` 模式同时执行严格模板和槽位序列匹配，
-也不会重新计数。运行时超过输入、槽位命中或状态限制时，会抛出
-`TemplateMatcher.MatchLimitExceededException`。调用方可以通过 `phase()`、`limitName()` 和
-`limit()` 区分限流原因，统一转换为业务侧的参数错误或降级结果。
+Supported syntax:
 
-`MatchResult` 提供：
+- `(a|b|c)` selects one alternative.
+- `(a|b|c)?` makes the complete group optional.
+- `[slotName]` remains a runtime dictionary lookup and is never expanded into templates.
 
-```java
-category()
-templateId()
-mode()
-priority()
-captures()
-slotCaptures()
-```
+Expansion is explicit: `addTemplate(...)` treats `()|?` as literal text, while `addExpandedTemplate(...)` interprets the syntax above. Control the compile-time expansion budget with `maxExpandedPatterns(...)`.
 
-其中：
+## Custom Pattern Syntax
 
-- `captures()` 返回简化后的槽位值。
-- `slotCaptures()` 返回带位置的槽位命中详情。
-- `RulePattern`、`MatchOptions`、`MatchResult`、`SlotCapture` 和 `Stats` 都提供值语义的 `equals()`、`hashCode()` 和可读的 `toString()`，便于测试断言、日志排查和作为缓存 key。
-
-### 配置统计
-
-构建完成后可以读取不可变统计快照，用于服务启动日志、健康检查或排查规则加载问题：
+Configure one immutable `PatternSyntax` before registering templates when the default `[]` and `()?` notation does not fit your configuration format:
 
 ```java
-TemplateMatcher.Stats stats = matcher.stats();
+import io.github.huanhuan5695.easyrule.PatternSyntax;
 
-stats.templateCount();
-stats.exactTemplateCount();
-stats.slotSequenceTemplateCount();
-stats.slotDictionaryCount();
-stats.slotValueCount();
+PatternSyntax syntax = PatternSyntax.builder()
+        .slot("${", "}")          // ${people}
+        .group("{", "}")          // {I/you}
+        .alternative("/")
+        .optional("~")            // {I/you}~
+        .sequenceSeparator("+")   // ${like}+${sing}
+        .escape("\\")
+        .build();
+
+TemplateMatcher matcher = TemplateMatcher.builder()
+        .patternSyntax(syntax)
+        .addSlotDictionary("people", Arrays.asList("student", "developer"))
+        .addSlotDictionary("like", Arrays.asList("likes"))
+        .addSlotDictionary("sing", Arrays.asList("singing"))
+        .addTemplate("profile", "identity", "I am ${people}")
+        .addPattern(RulePattern.slotSequence(
+                "music", "like-sing", "${like}+${sing}"))
+        .addExpandedTemplate(
+                "profile", "optional-identity", "{I/you}~am ${people}")
+        .build();
 ```
 
-## 设计约束
+Tokens may contain multiple characters:
 
-- 当前实现适合静态或低频更新的字典。字典更新后建议重新构建 matcher。
-- 槽位名只允许字母、数字、下划线和中划线。
-- `RulePattern` 创建时会校验槽位括号和槽位名，未闭合槽位、空槽位名和非法槽位名会直接抛出 `IllegalArgumentException`。
-- 槽位序列模式只把 `_` 作为分隔符；如果 pattern 里出现其他固定字符，就会按严格模板处理。
-- 当严格模板匹配成功时，不会继续执行槽位序列匹配。
-- `MatchOptions.maxStates()` 可以为单次调用设置更小的状态访问上限；实际上限取构建期上限和单次调用上限的较小值，并在本次 `match()` 的所有匹配阶段共享。
-- 生产环境建议启用 `strictSlotValidation()`，在构建期发现缺失的槽位字典。
-- 重复注册同一个 `RulePattern` 会按值语义去重，避免配置文件重复项造成重复匹配结果。
-- `build()` 会生成当前 Builder 状态的快照；后续继续给 Builder 添加模板不会影响已经构建好的 matcher。
-- `match()` 返回的结果列表、槽位 map 和槽位列表都是不可变集合，调用方可以安全共享结果对象。
-- `DoubleArrayTrie.commonPrefixSearch()` 和 `DoubleArrayTrie.words()` 返回不可变列表；`DoubleArrayTrie.build()` 要求传入非空集合对象，但会忽略集合中的 `null` 和空字符串；`size()` 返回去重后的有效词条数量。
-- 通过 `Collection<String>` 添加槽位字典时，会保留首次出现的有效值并忽略重复值，避免脏数据造成重复槽位序列结果。
-- 槽位序列匹配会基于共享扫描索引收集命中项，避免多个 sequence 模板重复扫描同一段文本；直接传入 `DoubleArrayTrie` 的槽位也会复用该索引。
+```java
+PatternSyntax syntax = PatternSyntax.builder()
+        .slot("{{", "}}")
+        .group("<<", ">>")
+        .alternative("||")
+        .optional("??")
+        .sequenceSeparator("::")
+        .build();
+```
 
-## 示例测试
+Prefix conflicts are rejected during `PatternSyntax.build()`. For example, slot start `<` conflicts with group start `<<`. Slot and group closing tokens may be identical, as in `${people}` and `{I/you}`, because parser context makes the meaning unambiguous.
 
-更多示例可以查看：
+Use the configured escape token before syntax that must remain literal. Escape both delimiters when both are reserved:
 
-- `src/test/java/io/github/huanhuan5695/easyrule/DoubleArrayTrieTest.java`
-- `src/test/java/io/github/huanhuan5695/easyrule/TemplateMatcherTest.java`
-- `src/test/java/TemplateMatcherPackageSmokeTest.java`
+```text
+Pattern: \${not-a-slot\} is ${value}
+Input:   ${not-a-slot} is example
+```
 
-这些测试展示了：
+The syntax must be set before `addTemplate(...)`, `addPattern(...)`, or `addExpandedTemplate(...)`. Dictionaries may be registered in any order. `RulePattern` stores rule metadata; syntax-dependent validation happens when it is registered with a matcher builder.
 
-- 普通词典前缀匹配
-- 显式 `RulePattern` / `PatternMode` API
-- 严格模板匹配
-- 多槽位抽取
-- 同名槽位多次捕获
-- 候选回退
-- 严格模板优先
-- 槽位序列兜底匹配
+## Loading Rules and Dictionaries
+
+Register a collection, a UTF-8 file, or a prebuilt trie:
+
+```java
+.addSlotDictionary("city", Arrays.asList("Beijing", "Shanghai"))
+.addSlotDictionaryFile("city", Path.of("dict/city.txt"))
+.addSlotDictionary("city", DoubleArrayTrie.build(cityNames))
+```
+
+Dictionary files contain one value per line. Blank lines and trimmed lines starting with `#` are ignored.
+
+Batch APIs validate all values before mutating the builder:
+
+```java
+.addSlotDictionaries(dictionaryMap)
+.addSlotDictionaryTries(trieMap)
+.addPatterns(rulePatterns)
+```
+
+For low-stakes or local rules, `addTemplate(category, pattern)` generates IDs such as `auto-1`. Use explicit IDs for persisted configurations, audit logs, and distributed systems.
+
+## Production Configuration
+
+Enable strict validation so configuration errors fail during startup:
+
+```java
+TemplateMatcher matcher = TemplateMatcher.builder()
+        .strictSlotValidation()
+        .strictTemplateIdValidation()
+        .maxStates(5_000)
+        .maxResults(20)
+        .maxInputLength(2_000)
+        .maxSlotHits(10_000)
+        .maxExpandedPatterns(100)
+        // dictionaries and patterns
+        .build();
+```
+
+Default limits:
+
+| Limit | Default | Protects against |
+| --- | ---: | --- |
+| `maxStates` | 10,000 | Excessive exact or sequence search branching |
+| `maxResults` | 100 | Large result collections |
+| `maxInputLength` | 100,000 | Oversized input strings |
+| `maxSlotHits` | 100,000 | Dense or highly overlapping dictionary hits |
+| `maxExpandedPatterns` | 512 | Combinatorial generalized-pattern expansion |
+
+Per-call options can lower, but never raise, matcher-level limits:
+
+```java
+MatchOptions options = MatchOptions.builder()
+        .maxStates(1_000)
+        .maxResults(5)
+        .maxInputLength(500)
+        .maxSlotHits(2_000)
+        .build();
+```
+
+Handle runtime limit failures separately from invalid rule configuration:
+
+```java
+try {
+    matcher.match(input, options);
+} catch (TemplateMatcher.MatchLimitExceededException exception) {
+    log.warn("Match limited: phase={}, limit={}={}",
+            exception.phase(), exception.limitName(), exception.limit());
+}
+```
+
+`TemplateMatcher` is immutable after `build()` and can be shared by request threads. To update rules or dictionaries, build a new snapshot and atomically replace the application reference.
+
+## How It Works
+
+```text
+Rule registration
+  -> parse text, slots, groups, and escapes with PatternSyntax
+  -> create a shared internal pattern AST
+  -> compile exact patterns into a shared template trie
+  -> compile slot sequences into ordered slot lists
+  -> build DoubleArrayTrie dictionaries and a shared scan index
+
+match(input)
+  -> enforce request limits
+  -> traverse exact template states without recursion
+  -> optionally scan and match slot sequences
+  -> retain ordered Top-K results
+  -> return immutable MatchResult objects
+```
+
+`DoubleArrayTrie` stores dictionary transitions in `base[]` and `check[]`. Slot-sequence dictionaries are also combined into a shared Aho-Corasick-style scan index, allowing one input scan to collect values required by multiple sequence templates. Search states use queues and shared capture traces rather than recursive calls or copied capture maps.
+
+## Project Layout
+
+```text
+src/main/java/io/github/huanhuan5695/easyrule/  library source
+src/test/java/                                    JUnit and no-dependency tests
+src/benchmark/java/                               local benchmark
+examples/QuickStart.java                          runnable example
+docs/performance.md                               benchmark guide
+docs/release.md                                   release checklist
+```
+
+## Development Commands
+
+| Command | Purpose |
+| --- | --- |
+| `mvn test` | Run the JUnit 5 suite |
+| `mvn package` | Build the jar, sources jar, and Javadocs jar |
+| `mvn install` | Install the snapshot into the local Maven repository |
+| `make check` | Run smoke tests, the example, and Javadocs without Maven |
+| `make example` | Compile and run `examples/QuickStart.java` |
+| `make benchmark` | Run the local dependency-free benchmark |
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request and [docs/performance.md](docs/performance.md) before reporting benchmark changes.
+
+## Current Constraints
+
+- Slot names may contain letters, digits, `_`, and `-`.
+- One `PatternSyntax` applies to every template in a matcher and must be configured before templates.
+- Syntax tokens must be non-empty and cannot have ambiguous prefix relationships.
+- Slot-sequence patterns may contain only slots and the configured sequence separator (`_` by default).
+- Generalized patterns support finite groups only; nested groups and arbitrary regular expressions are intentionally unsupported.
+- Dictionaries are optimized for static or infrequently updated data.
+- Duplicate dictionary values and identical `RulePattern` instances are deduplicated.
+- Match results and nested capture collections are immutable.
+- `null` input returns no results; invalid rules and invalid configuration fail fast.
+
+## License
+
+Released under the [MIT License](LICENSE).

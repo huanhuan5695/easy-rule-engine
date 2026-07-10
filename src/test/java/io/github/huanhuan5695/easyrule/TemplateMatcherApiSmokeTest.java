@@ -14,7 +14,7 @@ public class TemplateMatcherApiSmokeTest {
         exactModeIsExplicitAndReturnsSlotSpans();
         slotSequenceModeIsExplicitAndOnlyUsedAfterExactMiss();
         explicitSlotSequenceRejectsFixedTextOtherThanUnderscore();
-        rulePatternValidatesSlotSyntaxAtCreation();
+        builderValidatesPatternsWithConfiguredSyntax();
         builtMatcherIsNotChangedByLaterBuilderMutations();
         higherPriorityResultsAreReturnedFirst();
         strictSlotValidationFailsFastForMissingDictionaries();
@@ -29,6 +29,9 @@ public class TemplateMatcherApiSmokeTest {
         strictTemplateIdValidationTreatsExpandedTemplateAsOneLogicalTemplate();
         expandedTemplateRejectsConfiguredExpansionLimit();
         expandedTemplateStopsAsSoonAsIntermediateLimitIsExceeded();
+        customSyntaxSupportsExactSequenceAndExpandedPatterns();
+        customSyntaxSupportsMultiCharacterTokensAndEscapedLiterals();
+        patternSyntaxRejectsConflictingTokensAndLateConfiguration();
         builderCanRegisterDictionariesAndPatternsInBatches();
         builderCanRegisterTrieDictionariesInBatches();
         builderBatchRegistrationRejectsNullInputs();
@@ -92,28 +95,32 @@ public class TemplateMatcherApiSmokeTest {
 
     private static void explicitSlotSequenceRejectsFixedTextOtherThanUnderscore() {
         try {
-            RulePattern.slotSequence("bad", "bad-pattern", "[like]-[sing]");
+            TemplateMatcher.builder()
+                    .addPattern(RulePattern.slotSequence("bad", "bad-pattern", "[like]-[sing]"));
         } catch (IllegalArgumentException expected) {
             return;
         }
         throw new AssertionError("slot sequence should reject fixed text other than underscore");
     }
 
-    private static void rulePatternValidatesSlotSyntaxAtCreation() {
+    private static void builderValidatesPatternsWithConfiguredSyntax() {
         assertThrows(
                 IllegalArgumentException.class,
                 null,
-                () -> RulePattern.exact("bad", "unclosed", "我是[people"),
+                () -> TemplateMatcher.builder()
+                        .addPattern(RulePattern.exact("bad", "unclosed", "我是[people")),
                 "exact pattern should reject unclosed slots");
         assertThrows(
                 IllegalArgumentException.class,
                 null,
-                () -> RulePattern.slotSequence("bad", "empty-slot", "[]"),
+                () -> TemplateMatcher.builder()
+                        .addPattern(RulePattern.slotSequence("bad", "empty-slot", "[]")),
                 "slot sequence should reject empty slot names");
         assertThrows(
                 IllegalArgumentException.class,
                 null,
-                () -> RulePattern.slotSequence("bad", "invalid-slot", "[bad slot]"),
+                () -> TemplateMatcher.builder()
+                        .addPattern(RulePattern.slotSequence("bad", "invalid-slot", "[bad slot]")),
                 "slot sequence should reject invalid slot names");
     }
 
@@ -342,6 +349,82 @@ public class TemplateMatcherApiSmokeTest {
                                 "bounded",
                                 "(a|b)(c|d)(e|f)(g|h)(i|j)(k|l)(m|n)(o|p)(q|r)(s|t)"),
                 "expanded template should stop at the first over-limit result");
+    }
+
+    private static void customSyntaxSupportsExactSequenceAndExpandedPatterns() {
+        PatternSyntax syntax = PatternSyntax.builder()
+                .slot("${", "}")
+                .group("{", "}")
+                .alternative("/")
+                .optional("~")
+                .sequenceSeparator("+")
+                .escape("\\")
+                .build();
+
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .patternSyntax(syntax)
+                .strictSlotValidation()
+                .addSlotDictionary("people", Arrays.asList("中国人", "学生"))
+                .addSlotDictionary("like", Arrays.asList("喜欢"))
+                .addSlotDictionary("sing", Arrays.asList("唱歌"))
+                .addTemplate("profile", "identity", "我是${people}")
+                .addPattern(RulePattern.slotSequence("music", "like-sing", "${like}+${sing}"))
+                .addExpandedTemplate("media", "media-like", "{我/你}~${like}{电影/电视剧}")
+                .build();
+
+        assertEquals("identity", matcher.match("我是中国人").get(0).templateId(), "custom exact syntax");
+        assertEquals(
+                "like-sing",
+                matcher.match(
+                        "他喜欢大声唱歌",
+                        MatchOptions.builder().mode(MatchMode.SLOT_SEQUENCE_ONLY).build())
+                        .get(0)
+                        .templateId(),
+                "custom sequence syntax");
+        assertEquals("media-like", matcher.match("喜欢电影").get(0).templateId(), "custom optional syntax");
+        assertEquals("media-like", matcher.match("你喜欢电视剧").get(0).templateId(), "custom group syntax");
+    }
+
+    private static void customSyntaxSupportsMultiCharacterTokensAndEscapedLiterals() {
+        PatternSyntax syntax = PatternSyntax.builder()
+                .slot("{{", "}}")
+                .group("<<", ">>")
+                .alternative("||")
+                .optional("??")
+                .sequenceSeparator("::")
+                .escape("\\")
+                .build();
+
+        TemplateMatcher matcher = TemplateMatcher.builder()
+                .patternSyntax(syntax)
+                .addSlotDictionary("value", Arrays.asList("内容"))
+                .addExpandedTemplate(
+                        "custom",
+                        "escaped",
+                        "\\<<字面量\\>>{{value}}<<甲||乙>>??")
+                .build();
+
+        assertEquals("escaped", matcher.match("<<字面量>>内容").get(0).templateId(), "escaped group literal");
+        assertEquals("escaped", matcher.match("<<字面量>>内容乙").get(0).templateId(), "multi-token group");
+    }
+
+    private static void patternSyntaxRejectsConflictingTokensAndLateConfiguration() {
+        assertThrows(
+                IllegalArgumentException.class,
+                null,
+                () -> PatternSyntax.builder()
+                        .slot("<", ">")
+                        .group("<<", ")")
+                        .build(),
+                "syntax should reject prefix conflicts");
+
+        TemplateMatcher.Builder builder = TemplateMatcher.builder()
+                .addTemplate("profile", "identity", "我是[people]");
+        assertThrows(
+                IllegalStateException.class,
+                "patternSyntax must be configured before adding templates",
+                () -> builder.patternSyntax(PatternSyntax.builder().slot("${", "}").build()),
+                "syntax should be configured before templates");
     }
 
     private static void builderCanRegisterDictionariesAndPatternsInBatches() {
